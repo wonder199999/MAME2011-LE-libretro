@@ -1,0 +1,25 @@
+###########
+# Exclude
+###########
+*~
+/*
+!/*/
+!/.gitattributes
+!/.gitignore
+!/*.md
+#########
+# Ignore
+#########
+/cfg
+/diff
+/ini
+/inp
+/nvram
+/obj
+/snap
+/sta
+*.a
+*.o
+*.so
+*.bak
+*.backup
