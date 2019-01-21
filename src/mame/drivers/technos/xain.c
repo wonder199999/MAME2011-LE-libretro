@@ -138,16 +138,17 @@ Updates by Bryan McPhail, 12/12/2004:
 ***************************************************************************/
 
 #include "emu.h"
+#include "deprecat.h"
 #include "cpu/m6809/m6809.h"
 #include "cpu/m6805/m6805.h"
 #include "sound/2203intf.h"
 
-#define MASTER_CLOCK		XTAL_12MHz
-#define CPU_CLOCK			MASTER_CLOCK / 8
-#define MCU_CLOCK			MASTER_CLOCK / 4
-#define PIXEL_CLOCK			MASTER_CLOCK / 2
 
-static int vblank;
+#define MASTER_CLOCK			(XTAL_12MHz)
+#define CPU_CLOCK		(MASTER_CLOCK / 8)
+#define MCU_CLOCK		(MASTER_CLOCK / 4)
+#define PIXEL_CLOCK		(MASTER_CLOCK / 2)
+
 
 VIDEO_UPDATE( xain );
 VIDEO_START( xain );
@@ -161,6 +162,7 @@ WRITE8_HANDLER( xain_bgram1_w );
 WRITE8_HANDLER( xain_flipscreen_w );
 
 extern UINT8 *xain_charram, *xain_bgram0, *xain_bgram1, xain_pri;
+static int vblank;
 
 /* MCU */
 static int from_main;
@@ -171,24 +173,42 @@ static UINT8 port_a_in, port_b_in, port_c_in;
 static int _mcu_ready;
 static int _mcu_accept;
 
+#if defined(ARM_ENABLED)
+static INTERRUPT_GEN( xain_interrupt )
+{
+	int scanline = 255 - cpu_getiloops(device);
+
+	/* FIRQ(IMS) fires every on every 8th scanline (except 0) */
+	if (scanline & 0x08)
+		cpu_set_input_line(device, M6809_FIRQ_LINE, ASSERT_LINE);
+
+	/* NMI fires on scanline 248 (VBL) and is latched */
+	if (scanline == 248)
+		cpu_set_input_line(device, INPUT_LINE_NMI, ASSERT_LINE);
+
+	/* VBLANK input bit is held high from scanline 248 - 255 */
+	vblank = (scanline >= 248 - 1) ? 1 : 0;
+}
+#else
 /*
-    Based on the Solar Warrior schematics, vertical timing counts as follows:
+	Based on the Solar Warrior schematics, vertical timing counts as follows:
 
-        08,09,0A,0B,...,FC,FD,FE,FF,E8,E9,EA,EB,...,FC,FD,FE,FF,
-        08,09,....
+	   08,09,0A,0B,...,FC,FD,FE,FF,E8,E9,EA,EB,...,FC,FD,FE,FF,
+	   08,09,....
 
-    Thus, it counts from 08 to FF, then resets to E8 and counts to FF again.
-    This gives (256 - 8) + (256 - 232) = 248 + 24 = 272 total scanlines.
+	Thus, it counts from 08 to FF, then resets to E8 and counts to FF again.
+	This gives (256 - 8) + (256 - 232) = 248 + 24 = 272 total scanlines.
 
-    VBLK is signalled starting when the counter hits F8, and continues through
-    the reset to E8 and through until the next reset to 08 again.
+	VBLK is signalled starting when the counter hits F8, and continues through
+	the reset to E8 and through until the next reset to 08 again.
 
-    Since MAME's video timing is 0-based, we need to convert this.
+	Since MAME's video timing is 0-based, we need to convert this.
 */
 
 INLINE int scanline_to_vcount(int scanline)
 {
 	int vcount = scanline + 8;
+
 	if (vcount < 0x100)
 		return vcount;
 	else
@@ -209,7 +229,7 @@ static TIMER_DEVICE_CALLBACK( xain_scanline )
 	}
 
 	/* FIRQ (IMS) fires every on every 8th scanline (except 0) */
-	if (!(vcount_old & 8) && (vcount & 8))
+	if (!(vcount_old & 0x08) && (vcount & 0x08))
 	{
 		cputag_set_input_line(timer.machine, "maincpu", M6809_FIRQ_LINE, ASSERT_LINE);
 	}
@@ -221,7 +241,7 @@ static TIMER_DEVICE_CALLBACK( xain_scanline )
 	}
 
 	/* VBLANK input bit is held high from scanlines 248-255 */
-	if (vcount >= 248-1)	// -1 is a hack - see notes above
+	if (vcount >= 248 - 1)	// -1 is a hack - see notes above
 	{
 		vblank = 1;
 	}
@@ -230,10 +250,11 @@ static TIMER_DEVICE_CALLBACK( xain_scanline )
 		vblank = 0;
 	}
 }
+#endif
 
 static WRITE8_HANDLER( xainCPUA_bankswitch_w )
 {
-	xain_pri = data & 0x7;
+	xain_pri = data & 0x07;
 	memory_set_bank(space->machine, "bank1", (data >> 3) & 1);
 }
 
@@ -244,7 +265,7 @@ static WRITE8_HANDLER( xainCPUB_bankswitch_w )
 
 static WRITE8_HANDLER( xain_sound_command_w )
 {
-	soundlatch_w(space,offset,data);
+	soundlatch_w(space, offset, data);
 	cputag_set_input_line(space->machine, "audiocpu", M6809_IRQ_LINE, HOLD_LINE);
 }
 
@@ -252,18 +273,18 @@ static WRITE8_HANDLER( xain_main_irq_w )
 {
 	switch (offset)
 	{
-	case 0: /* 0x3a09 - NMI clear */
-		cputag_set_input_line(space->machine, "maincpu", INPUT_LINE_NMI, CLEAR_LINE);
-		break;
-	case 1: /* 0x3a0a - FIRQ clear */
-		cputag_set_input_line(space->machine, "maincpu", M6809_FIRQ_LINE, CLEAR_LINE);
-		break;
-	case 2: /* 0x3a0b - IRQ clear */
-		cputag_set_input_line(space->machine, "maincpu", M6809_IRQ_LINE, CLEAR_LINE);
-		break;
-	case 3: /* 0x3a0c - IRQB assert */
-		cputag_set_input_line(space->machine, "sub", M6809_IRQ_LINE, ASSERT_LINE);
-		break;
+		case 0:		/* 0x3a09 - NMI clear */
+			cputag_set_input_line(space->machine, "maincpu", INPUT_LINE_NMI, CLEAR_LINE);
+			break;
+		case 1:		/* 0x3a0a - FIRQ clear */
+			cputag_set_input_line(space->machine, "maincpu", M6809_FIRQ_LINE, CLEAR_LINE);
+			break;
+		case 2:		/* 0x3a0b - IRQ clear */
+			cputag_set_input_line(space->machine, "maincpu", M6809_IRQ_LINE, CLEAR_LINE);
+			break;
+		case 3:		/* 0x3a0c - IRQB assert */
+			cputag_set_input_line(space->machine, "sub", M6809_IRQ_LINE, ASSERT_LINE);
+			break;
 	}
 }
 
@@ -280,6 +301,7 @@ static WRITE8_HANDLER( xain_irqB_clear_w )
 static READ8_HANDLER( xain_68705_r )
 {
 	_mcu_ready = 1;
+
 	return from_mcu;
 }
 
@@ -326,22 +348,26 @@ READ8_HANDLER( xain_68705_port_b_r )
 
 WRITE8_HANDLER( xain_68705_port_b_w )
 {
-	if ((ddr_b & 0x02) && (~data & 0x02))
+	if (ddr_b & 0x02)
 	{
-		port_a_in = from_main;
-	}
-	/* Rising edge of PB1 */
-	else if ((ddr_b & 0x02) && (~port_b_out & 0x02) && (data & 0x02))
-	{
-		_mcu_accept = 1;
-		cputag_set_input_line(space->machine, "mcu", 0, CLEAR_LINE);
-	}
+		if (~data & 0x02)
+			port_a_in = from_main;
 
-	/* Rising edge of PB2 */
-	if ((ddr_b & 0x04) && (~port_b_out & 0x04) && (data & 0x04))
+		/* Rising edge of PB1 */
+		else if ((~port_b_out & 0x02) && (data & 0x02))
+		{
+			_mcu_accept = 1;
+			cputag_set_input_line(space->machine, "mcu", 0, CLEAR_LINE);
+		}
+	}
+	if (ddr_b & 0x04)
 	{
-		_mcu_ready = 0;
-		from_mcu = port_a_out;
+		/* Rising edge of PB2 */
+		if ((~port_b_out & 0x04) && (data & 0x04))
+		{
+			_mcu_ready = 0;
+			from_mcu = port_a_out;
+		}
 	}
 
 	port_b_out = data;
@@ -358,6 +384,7 @@ READ8_HANDLER( xain_68705_port_c_r )
 
 	if (!_mcu_accept)
 		port_c_in |= 0x01;
+
 	if (_mcu_ready)
 		port_c_in |= 0x02;
 
@@ -387,7 +414,7 @@ static CUSTOM_INPUT( mcu_status_r )
 	}
 	else
 	{
-		return 3;
+		return 0x03;
 	}
 
 	return res;
@@ -450,8 +477,6 @@ static ADDRESS_MAP_START( mcu_map, ADDRESS_SPACE_PROGRAM, 8 )
 	AM_RANGE(0x0004, 0x0004) AM_WRITE(xain_68705_ddr_a_w)
 	AM_RANGE(0x0005, 0x0005) AM_WRITE(xain_68705_ddr_b_w)
 	AM_RANGE(0x0006, 0x0006) AM_WRITE(xain_68705_ddr_c_w)
-//  AM_RANGE(0x0008, 0x0008) AM_READWRITE(m68705_tdr_r, m68705_tdr_w)
-//  AM_RANGE(0x0009, 0x0009) AM_READWRITE(m68705_tcr_r, m68705_tcr_w)
 	AM_RANGE(0x0010, 0x007f) AM_RAM
 	AM_RANGE(0x0080, 0x07ff) AM_ROM
 ADDRESS_MAP_END
@@ -600,8 +625,11 @@ static MACHINE_DRIVER_START( xsleena )
 	/* basic machine hardware */
 	MDRV_CPU_ADD("maincpu", M6809, CPU_CLOCK)
 	MDRV_CPU_PROGRAM_MAP(main_map)
+#if defined(ARM_ENABLED)
+	MDRV_CPU_VBLANK_INT_HACK(xain_interrupt, 256)
+#else
 	MDRV_TIMER_ADD_SCANLINE("scantimer", xain_scanline, "screen", 0, 1)
-
+#endif
 	MDRV_CPU_ADD("sub", M6809, CPU_CLOCK)
 	MDRV_CPU_PROGRAM_MAP(cpu_map_B)
 
@@ -612,17 +640,21 @@ static MACHINE_DRIVER_START( xsleena )
 	MDRV_CPU_PROGRAM_MAP(mcu_map)
 
 	MDRV_MACHINE_START(xsleena)
-
 	MDRV_QUANTUM_PERFECT_CPU("maincpu")
 
 	/* video hardware */
 	MDRV_SCREEN_ADD("screen", RASTER)
 	MDRV_SCREEN_FORMAT(BITMAP_FORMAT_INDEXED16)
+#if defined(ARM_ENABLED)
+	MDRV_SCREEN_REFRESH_RATE(57.444853)
+	MDRV_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
+	MDRV_SCREEN_SIZE(32*8, 32*8)
+	MDRV_SCREEN_VISIBLE_AREA(0*8, 32*8-1, 2*8, 30*8-1)
+#else
 	MDRV_SCREEN_RAW_PARAMS(PIXEL_CLOCK, 384, 0, 256, 272, 8, 248)	/* based on ddragon driver */
-
+#endif
 	MDRV_GFXDECODE(xain)
 	MDRV_PALETTE_LENGTH(512)
-
 	MDRV_VIDEO_START(xain)
 	MDRV_VIDEO_UPDATE(xain)
 
@@ -656,24 +688,24 @@ MACHINE_DRIVER_END
 
 ***************************************************************************/
 
-// Xain'd Sleena (World)
+/* Xain'd Sleena (World) */
 ROM_START( xsleena )
 	ROM_REGION( 0x14000, "maincpu", 0 )
-	ROM_LOAD( "p9-08.ic66",   0x08000, 0x8000, CRC(5179ae3f) SHA1(9e4e2825e56b090aa759b0da39ccb17ccd77ede2) ) // Master M6809 Code
+	ROM_LOAD( "p9-08.ic66",   0x08000, 0x8000, CRC(5179ae3f) SHA1(9e4e2825e56b090aa759b0da39ccb17ccd77ede2) ) /* Master M6809 Code */
 	ROM_LOAD( "pa-09.ic65",   0x04000, 0x4000, CRC(10a7c800) SHA1(f19201fe1414faed649b8e49416025aae44bcb6c) )
 	ROM_CONTINUE(             0x10000, 0x4000 )
 
 	ROM_REGION( 0x14000, "sub", 0 )
-	ROM_LOAD( "p1-0.ic29",    0x08000, 0x8000, CRC(a1a860e2) SHA1(fb2b152bfafc44608039774436ddf3b17eed979c) ) // Slave M6809 code
+	ROM_LOAD( "p1-0.ic29",    0x08000, 0x8000, CRC(a1a860e2) SHA1(fb2b152bfafc44608039774436ddf3b17eed979c) ) /* Slave M6809 code */
 	ROM_LOAD( "p0-0.ic15",    0x04000, 0x4000, CRC(948b9757) SHA1(3ea840cc47ae6a66f3e5f6a2f3e88475dcfe1840) )
 	ROM_CONTINUE(             0x10000, 0x4000 )
 
 	ROM_REGION( 0x10000, "audiocpu", 0 )
-	ROM_LOAD( "p2-0.ic49",     0x8000, 0x8000, CRC(a5318cb8) SHA1(35fb28c5598e39f22552bb036ae356b78422f080) ) // Sound M6809 Code
+	ROM_LOAD( "p2-0.ic49",     0x8000, 0x8000, CRC(a5318cb8) SHA1(35fb28c5598e39f22552bb036ae356b78422f080) ) /* Sound M6809 Code */
 
-	ROM_REGION( 0x800, "mcu", 0 )
+	ROM_REGION( 0x0800, "mcu", 0 )
+
 	ROM_LOAD( "pz-0.113",      0x0000, 0x0800, CRC(a432a907) SHA1(4708a40e3a82dec2c5a64bc5da884a37d503cb6b) ) /* MC68705P5S MCU internal code */
-
 	ROM_REGION( 0x08000, "gfx1", 0 )
 	ROM_LOAD( "pb-01.ic24",   0x00000, 0x8000, CRC(83c00dd8) SHA1(8e9b19281039b63072270c7a63d9fb30cda570fd) ) /* chars */
 
@@ -711,7 +743,7 @@ ROM_START( xsleena )
 	ROM_LOAD( "pt-0.ic59",    0x00000, 0x0100, CRC(fed32888) SHA1(4e9330456b20f7198c1e27ca1ae7200f25595599) ) /* BPROM type MB7114E  Priority (not used) */
 ROM_END
 
-// Xain'd Sleena (Japan)
+/* Xain'd Sleena (Japan) */
 ROM_START( xsleenaj )
 	ROM_REGION( 0x14000, "maincpu", 0 )
 	ROM_LOAD( "p9-01.ic66",   0x08000, 0x8000, CRC(370164be) SHA1(65c9951cac7dc3943fa4d5f9919ebb4c4f29b3ae) ) /* the '1' on the label was ink stamped */
@@ -726,7 +758,7 @@ ROM_START( xsleenaj )
 	ROM_REGION( 0x10000, "audiocpu", 0 )
 	ROM_LOAD( "p2-0.ic49",     0x8000, 0x8000, CRC(a5318cb8) SHA1(35fb28c5598e39f22552bb036ae356b78422f080) )
 
-	ROM_REGION( 0x800, "mcu", 0 )
+	ROM_REGION( 0x0800, "mcu", 0 )
 	ROM_LOAD( "pz-0.113",      0x0000, 0x0800, CRC(a432a907) SHA1(4708a40e3a82dec2c5a64bc5da884a37d503cb6b) ) /* MC68705P5S MCU internal code */
 
 	ROM_REGION( 0x08000, "gfx1", 0 )
@@ -766,7 +798,7 @@ ROM_START( xsleenaj )
 	ROM_LOAD( "pt-0.ic59",    0x00000, 0x0100, CRC(fed32888) SHA1(4e9330456b20f7198c1e27ca1ae7200f25595599) ) /* BPROM type MB7114E  Priority (not used) */
 ROM_END
 
-// Solar-Warrior (US)
+/* Solar-Warrior (US) */
 ROM_START( solrwarr )
 	ROM_REGION( 0x14000, "maincpu", 0 )
 	ROM_LOAD( "p9-02.ic66",   0x08000, 0x8000, CRC(8ff372a8) SHA1(0fc396e662419fb9cb5bea11748aa8e0e8d072e6) )
@@ -781,7 +813,7 @@ ROM_START( solrwarr )
 	ROM_REGION( 0x10000, "audiocpu", 0 )
 	ROM_LOAD( "p2-0.ic49",     0x8000, 0x8000, CRC(a5318cb8) SHA1(35fb28c5598e39f22552bb036ae356b78422f080) )
 
-	ROM_REGION( 0x800, "mcu", 0 )
+	ROM_REGION( 0x0800, "mcu", 0 )
 	ROM_LOAD( "pz-0.113",      0x0000, 0x0800, CRC(a432a907) SHA1(4708a40e3a82dec2c5a64bc5da884a37d503cb6b) ) /* MC68705P5S MCU internal code */
 
 	ROM_REGION( 0x08000, "gfx1", 0 )
@@ -821,7 +853,7 @@ ROM_START( solrwarr )
 	ROM_LOAD( "pt-0.ic59",    0x00000, 0x0100, CRC(fed32888) SHA1(4e9330456b20f7198c1e27ca1ae7200f25595599) ) /* BPROM type MB7114E  Priority (not used) */
 ROM_END
 
-// Xain'd Sleena (bootleg)
+/* Xain'd Sleena (bootleg) */
 ROM_START( xsleenab )
 	ROM_REGION( 0x14000, "maincpu", 0 )
 	ROM_LOAD( "1.rom",        0x08000, 0x8000, CRC(79f515a7) SHA1(e61f18e3639dd9afe16c7bcb90fa7be31905e2c6) )
@@ -873,9 +905,9 @@ ROM_START( xsleenab )
 	ROM_LOAD( "pt-0.ic59",    0x00000, 0x0100, CRC(fed32888) SHA1(4e9330456b20f7198c1e27ca1ae7200f25595599) ) /* BPROM type MB7114E  Priority (not used) */
 ROM_END
 
-// Xain'd Sleena (bootleg, bugfixed)
-// newer bootleg, fixes some of the issues with the other one
-// f205v id 1016
+/* Xain'd Sleena (bootleg, bugfixed)
+   newer bootleg, fixes some of the issues with the other one
+   f205v id 1016	*/
 ROM_START( xsleenaba )
 	ROM_REGION( 0x14000, "maincpu", 0 )
 	ROM_LOAD( "xs87b-10.7d",    0x08000, 0x8000, CRC(3d5f9fb4) SHA1(d315b5415a471e05ee61b84fcaf739c75f890061) )
@@ -928,389 +960,8 @@ ROM_START( xsleenaba )
 ROM_END
 
 
-GAME( 1986, xsleena,	0,	  xsleena,   xsleena,	0,   ROT0,  "Technos Japan (Taito license)", "Xain'd Sleena (World)", GAME_SUPPORTS_SAVE )
-GAME( 1986, xsleenaj,	xsleena,  xsleena,   xsleena,	0,   ROT0,  "Technos Japan", "Xain'd Sleena (Japan)", GAME_SUPPORTS_SAVE )
-GAME( 1986, solrwarr,	xsleena,  xsleena,   xsleena,	0,   ROT0,  "Technos Japan (Taito license)", "Solar-Warrior (US)", GAME_SUPPORTS_SAVE )
-GAME( 1986, xsleenab,	xsleena,  xsleenab,  xsleena,	0,   ROT0,  "bootleg", "Xain'd Sleena (bootleg)", GAME_SUPPORTS_SAVE )
-GAME( 1987, xsleenaba,	xsleena,  xsleenab,  xsleena,	0,   ROT0,  "bootleg", "Xain'd Sleena (bootleg, bugfixed)", GAME_SUPPORTS_SAVE ) // newer bootleg, fixes some of the issues with the other one
-
-#if 0
-
-static struct BurnRomInfo xsleenaRomDesc[] = {
-	{ "p9-08.ic66",		0x8000, 0x5179ae3f, 1 | BRF_PRG | BRF_ESS },
-	{ "pa-09.ic65",		0x8000, 0x10a7c800, 1 | BRF_PRG | BRF_ESS }, //  1
-
-	{ "p1-0.ic29",		0x8000, 0xa1a860e2, 2 | BRF_PRG | BRF_ESS },
-	{ "p0-0.ic15",		0x8000, 0x948b9757, 2 | BRF_PRG | BRF_ESS }, //  3
-
-	{ "p2-0.ic49",		0x8000, 0xa5318cb8, 3 | BRF_PRG | BRF_ESS },
-
-	{ "pb-01.ic24",		0x8000, 0x83c00dd8, 4 | BRF_GRA },           //  5 Character
-
-	{ "pk-0.ic136",		0x8000, 0x11eb4247, 5 | BRF_GRA },           //  6 Background Layer 1 tiles
-	{ "pl-0.ic135",		0x8000, 0x422b536e, 5 | BRF_GRA },           //  7
-	{ "pm-0.ic134",		0x8000, 0x828c1b0c, 5 | BRF_GRA },           //  8
-	{ "pn-0.ic133",		0x8000, 0xd37939e0, 5 | BRF_GRA },           //  9
-	{ "pc-0.ic114",		0x8000, 0x8f0aa1a7, 5 | BRF_GRA },           // 10
-	{ "pd-0.ic113",		0x8000, 0x45681910, 5 | BRF_GRA },           // 11
-	{ "pe-0.ic112",		0x8000, 0xa8eeabc8, 5 | BRF_GRA },           // 12
-	{ "pf-0.ic111",		0x8000, 0xe59a2f27, 5 | BRF_GRA },           // 13
-
-	{ "p5-0.ic44",		0x8000, 0x5c6c453c, 6 | BRF_GRA },           // 14 Background Layer 0 tiles
-	{ "p4-0.ic45",		0x8000, 0x59d87a9a, 6 | BRF_GRA },           // 15
-	{ "p3-0.ic46",		0x8000, 0x84884a2e, 6 | BRF_GRA },           // 16
-	{ "p6-0.ic43",		0x8000, 0x8d637639, 6 | BRF_GRA },           // 17
-	{ "p7-0.ic42",		0x8000, 0x71eec4e6, 6 | BRF_GRA },           // 18
-	{ "p8-0.ic41",		0x8000, 0x7fc9704f, 6 | BRF_GRA },           // 19
-
-	{ "po-0.ic131",		0x8000, 0x252976ae, 7 | BRF_GRA },           // 20 Sprite tiles
-	{ "pp-0.ic130",		0x8000, 0xe6f1e8d5, 7 | BRF_GRA },           // 21
-	{ "pq-0.ic129",		0x8000, 0x785381ed, 7 | BRF_GRA },           // 22
-	{ "pr-0.ic128",		0x8000, 0x59754e3d, 7 | BRF_GRA },           // 23
-	{ "pg-0.ic109",		0x8000, 0x4d977f33, 7 | BRF_GRA },           // 24
-	{ "ph-0.ic108",		0x8000, 0x3f3b62a0, 7 | BRF_GRA },           // 25
-	{ "pi-0.ic107",		0x8000, 0x76641ee3, 7 | BRF_GRA },           // 26
-	{ "pj-0.ic106",		0x8000, 0x37671f36, 7 | BRF_GRA },           // 27
-
-	{ "pt-0.ic59",		0x0100, 0xfed32888, 8 | BRF_GRA | BRF_OPT }, // 28 Priority Prom
-
-	{ "pz-0.113",		0x0800, 0xa432a907, 9 | BRF_PRG | BRF_ESS }, // 29 M68705 Code
-};
-
-STD_ROM_PICK(xsleena)
-STD_ROM_FN(xsleena)
-
-static struct BurnRomInfo xsleenajRomDesc[] = {
-	{ "p9-01.ic66",		0x8000, 0x370164be, 1 | BRF_PRG | BRF_ESS }, //  0 Master M6809 Code
-	{ "pa-0.ic65",		0x8000, 0xd22bf859, 1 | BRF_PRG | BRF_ESS }, //  1
-
-	{ "p1-0.ic29",		0x8000, 0xa1a860e2, 2 | BRF_PRG | BRF_ESS }, //  2 Slave M6809 code
-	{ "p0-0.ic15",		0x8000, 0x948b9757, 2 | BRF_PRG | BRF_ESS }, //  3
-
-	{ "p2-0.ic49",		0x8000, 0xa5318cb8, 3 | BRF_PRG | BRF_ESS }, //  4 Sound M6809 Code
-
-	{ "pb-01.ic24",		0x8000, 0x83c00dd8, 4 | BRF_GRA },           //  5 Character
-
-	{ "pk-0.ic136",		0x8000, 0x11eb4247, 5 | BRF_GRA },           //  6 Background Layer 1 tiles
-	{ "pl-0.ic135",		0x8000, 0x422b536e, 5 | BRF_GRA },           //  7
-	{ "pm-0.ic134",		0x8000, 0x828c1b0c, 5 | BRF_GRA },           //  8
-	{ "pn-0.ic133",		0x8000, 0xd37939e0, 5 | BRF_GRA },           //  9
-	{ "pc-0.ic114",		0x8000, 0x8f0aa1a7, 5 | BRF_GRA },           // 10
-	{ "pd-0.ic113",		0x8000, 0x45681910, 5 | BRF_GRA },           // 11
-	{ "pe-0.ic112",		0x8000, 0xa8eeabc8, 5 | BRF_GRA },           // 12
-	{ "pf-0.ic111",		0x8000, 0xe59a2f27, 5 | BRF_GRA },           // 13
-
-	{ "p5-0.ic44",		0x8000, 0x5c6c453c, 6 | BRF_GRA },           // 14 Background Layer 0 tiles
-	{ "p4-0.ic45",		0x8000, 0x59d87a9a, 6 | BRF_GRA },           // 15
-	{ "p3-0.ic46",		0x8000, 0x84884a2e, 6 | BRF_GRA },           // 16
-	{ "p6-0.ic43",		0x8000, 0x8d637639, 6 | BRF_GRA },           // 17
-	{ "p7-0.ic42",		0x8000, 0x71eec4e6, 6 | BRF_GRA },           // 18
-	{ "p8-0.ic41",		0x8000, 0x7fc9704f, 6 | BRF_GRA },           // 19
-
-	{ "po-0.ic131",		0x8000, 0x252976ae, 7 | BRF_GRA },           // 20 Sprite tiles
-	{ "pp-0.ic130",		0x8000, 0xe6f1e8d5, 7 | BRF_GRA },           // 21
-	{ "pq-0.ic129",		0x8000, 0x785381ed, 7 | BRF_GRA },           // 22
-	{ "pr-0.ic128",		0x8000, 0x59754e3d, 7 | BRF_GRA },           // 23
-	{ "pg-0.ic109",		0x8000, 0x4d977f33, 7 | BRF_GRA },           // 24
-	{ "ph-0.ic108",		0x8000, 0x3f3b62a0, 7 | BRF_GRA },           // 25
-	{ "pi-0.ic107",		0x8000, 0x76641ee3, 7 | BRF_GRA },           // 26
-	{ "pj-0.ic106",		0x8000, 0x37671f36, 7 | BRF_GRA },           // 27
-
-	{ "pt-0.ic59",		0x0100, 0xfed32888, 8 | BRF_GRA | BRF_OPT }, // 28 Priority Prom
-
-	{ "pz-0.113",		0x0800, 0xa432a907, 9 | BRF_PRG | BRF_ESS }, // 29 M68705 Code
-};
-
-STD_ROM_PICK(xsleenaj)
-STD_ROM_FN(xsleenaj)
-
-
-static struct BurnRomInfo solrwarrRomDesc[] = {
-	{ "p9-02.ic66",		0x8000, 0x8ff372a8, 1 | BRF_PRG | BRF_ESS }, //  0 Master M6809 code
-	{ "pa-03.ic65",		0x8000, 0x154f946f, 1 | BRF_PRG | BRF_ESS }, //  1
-
-	{ "p1-02.ic29",		0x8000, 0xf5f235a3, 2 | BRF_PRG | BRF_ESS }, //  2 Slave M6809 code
-	{ "p0-02.ic133",	0x8000, 0x51ae95ae, 2 | BRF_PRG | BRF_ESS }, //  3
-
-	{ "p2-0.ic49",		0x8000, 0xa5318cb8, 3 | BRF_PRG | BRF_ESS }, //  4 Sound M6809 Code
-
-	{ "pb-01.ic24",		0x8000, 0x83c00dd8, 4 | BRF_GRA },           //  5 Character
-
-	{ "pk-0.ic136",		0x8000, 0x11eb4247, 5 | BRF_GRA },           //  6 Background Layer 1 tiles
-	{ "pl-0.ic135",		0x8000, 0x422b536e, 5 | BRF_GRA },           //  7
-	{ "pm-0.ic134",		0x8000, 0x828c1b0c, 5 | BRF_GRA },           //  8
-	{ "pn-02.ic133",	0x8000, 0xd2ed6f94, 5 | BRF_GRA },           //  9
-	{ "pc-0.ic114",		0x8000, 0x8f0aa1a7, 5 | BRF_GRA },           // 10
-	{ "pd-0.ic113",		0x8000, 0x45681910, 5 | BRF_GRA },           // 11
-	{ "pe-0.ic112",		0x8000, 0xa8eeabc8, 5 | BRF_GRA },           // 12
-	{ "pf-02.ic111",	0x8000, 0x6e627a77, 5 | BRF_GRA },           // 13
-
-	{ "p5-0.ic44",		0x8000, 0x5c6c453c, 6 | BRF_GRA },           // 14 Background Layer 0 tiles
-	{ "p4-0.ic45",		0x8000, 0x59d87a9a, 6 | BRF_GRA },           // 15
-	{ "p3-0.ic46",		0x8000, 0x84884a2e, 6 | BRF_GRA },           // 16
-	{ "p6-0.ic43",		0x8000, 0x8d637639, 6 | BRF_GRA },           // 17
-	{ "p7-0.ic42",		0x8000, 0x71eec4e6, 6 | BRF_GRA },           // 18
-	{ "p8-0.ic41",		0x8000, 0x7fc9704f, 6 | BRF_GRA },           // 19
-
-	{ "po-0.ic131",		0x8000, 0x252976ae, 7 | BRF_GRA },           // 20 Sprite tiles
-	{ "pp-0.ic130",		0x8000, 0xe6f1e8d5, 7 | BRF_GRA },           // 21
-	{ "pq-0.ic129",		0x8000, 0x785381ed, 7 | BRF_GRA },           // 22
-	{ "pr-0.ic128",		0x8000, 0x59754e3d, 7 | BRF_GRA },           // 23
-	{ "pg-0.ic109",		0x8000, 0x4d977f33, 7 | BRF_GRA },           // 24
-	{ "ph-0.ic108",		0x8000, 0x3f3b62a0, 7 | BRF_GRA },           // 25
-	{ "pi-0.ic107",		0x8000, 0x76641ee3, 7 | BRF_GRA },           // 26
-	{ "pj-0.ic106",		0x8000, 0x37671f36, 7 | BRF_GRA },           // 27
-
-	{ "pt-0.ic59",		0x0100, 0xfed32888, 8 | BRF_GRA | BRF_OPT }, // 28 Priority Prom
-
-	{ "pz-0.113",		0x0800, 0xa432a907, 9 | BRF_PRG | BRF_ESS }, // 29 M68705 Code
-};
-
-STD_ROM_PICK(solrwarr)
-STD_ROM_FN(solrwarr)
-
-static struct BurnRomInfo xsleenabRomDesc[] = {
-	{ "1.rom",			0x8000, 0x79f515a7, 1 | BRF_PRG | BRF_ESS }, //  0 Master M6809 Code
-	{ "pa-0.ic65",		0x8000, 0xd22bf859, 1 | BRF_PRG | BRF_ESS }, //  1
-
-	{ "p1-0.ic29",		0x8000, 0xa1a860e2, 2 | BRF_PRG | BRF_ESS }, //  2 Slave M6809 code
-	{ "p0-0.ic15",		0x8000, 0x948b9757, 2 | BRF_PRG | BRF_ESS }, //  3
-
-	{ "p2-0.ic49",		0x8000, 0xa5318cb8, 3 | BRF_PRG | BRF_ESS }, //  4 Sound M6809 Code
-
-	{ "pb-01.ic24",		0x8000, 0x83c00dd8, 4 | BRF_GRA },           //  5 Character
-
-	{ "pk-0.ic136",		0x8000, 0x11eb4247, 5 | BRF_GRA },           //  6 Background Layer 1 tiles
-	{ "pl-0.ic135",		0x8000, 0x422b536e, 5 | BRF_GRA },           //  7
-	{ "pm-0.ic134",		0x8000, 0x828c1b0c, 5 | BRF_GRA },           //  8
-	{ "pn-0.ic133",		0x8000, 0xd37939e0, 5 | BRF_GRA },           //  9
-	{ "pc-0.ic114",		0x8000, 0x8f0aa1a7, 5 | BRF_GRA },           // 10
-	{ "pd-0.ic113",		0x8000, 0x45681910, 5 | BRF_GRA },           // 11
-	{ "pe-0.ic112",		0x8000, 0xa8eeabc8, 5 | BRF_GRA },           // 12
-	{ "pf-0.ic111",		0x8000, 0xe59a2f27, 5 | BRF_GRA },           // 13
-
-	{ "p5-0.ic44",		0x8000, 0x5c6c453c, 6 | BRF_GRA },           // 14 Background Layer 0 tiles
-	{ "p4-0.ic45",		0x8000, 0x59d87a9a, 6 | BRF_GRA },           // 15
-	{ "p3-0.ic46",		0x8000, 0x84884a2e, 6 | BRF_GRA },           // 16
-	{ "p6-0.ic43",		0x8000, 0x8d637639, 6 | BRF_GRA },           // 17
-	{ "p7-0.ic42",		0x8000, 0x71eec4e6, 6 | BRF_GRA },           // 18
-	{ "p8-0.ic41",		0x8000, 0x7fc9704f, 6 | BRF_GRA },           // 19
-
-	{ "po-0.ic131",		0x8000, 0x252976ae, 7 | BRF_GRA },           // 20 Sprite tiles
-	{ "pp-0.ic130",		0x8000, 0xe6f1e8d5, 7 | BRF_GRA },           // 21
-	{ "pq-0.ic129",		0x8000, 0x785381ed, 7 | BRF_GRA },           // 22
-	{ "pr-0.ic128",		0x8000, 0x59754e3d, 7 | BRF_GRA },           // 23
-	{ "pg-0.ic109",		0x8000, 0x4d977f33, 7 | BRF_GRA },           // 24
-	{ "ph-0.ic108",		0x8000, 0x3f3b62a0, 7 | BRF_GRA },           // 25
-	{ "pi-0.ic107",		0x8000, 0x76641ee3, 7 | BRF_GRA },           // 26
-	{ "pj-0.ic106",		0x8000, 0x37671f36, 7 | BRF_GRA },           // 27
-
-	{ "pt-0.ic59",		0x0100, 0xfed32888, 8 | BRF_GRA | BRF_OPT }, // 28 Priority Prom
-};
-
-STD_ROM_PICK(xsleenab)
-STD_ROM_FN(xsleenab)
-
-static struct BurnRomInfo xsleenabaRomDesc[] = {
-	{ "xs87b-10.7d",	0x8000, 0x3d5f9fb4, 1 | BRF_PRG | BRF_ESS }, //  0 Master M6809 Code
-	{ "xs87b-11.7c",	0x8000, 0x81c80d54, 1 | BRF_PRG | BRF_ESS }, //  1
-
-	{ "p1-0.ic29",		0x8000, 0xa1a860e2, 2 | BRF_PRG | BRF_ESS }, //  2 Slave M6809 code
-	{ "p0-0.ic15",		0x8000, 0x948b9757, 2 | BRF_PRG | BRF_ESS }, //  3
-
-	{ "p2-0.ic49",		0x8000, 0xa5318cb8, 3 | BRF_PRG | BRF_ESS }, //  4 Sound M6809 Code
-
-	{ "pb-01.ic24",		0x8000, 0x83c00dd8, 4 | BRF_GRA },           //  5 Character
-
-	{ "pk-0.ic136",		0x8000, 0x11eb4247, 5 | BRF_GRA },           //  6 Background Layer 1 tiles
-	{ "pl-0.ic135",		0x8000, 0x422b536e, 5 | BRF_GRA },           //  7
-	{ "pm-0.ic134",		0x8000, 0x828c1b0c, 5 | BRF_GRA },           //  8
-	{ "pn-0.ic133",		0x8000, 0xd37939e0, 5 | BRF_GRA },           //  9
-	{ "pc-0.ic114",		0x8000, 0x8f0aa1a7, 5 | BRF_GRA },           // 10
-	{ "pd-0.ic113",		0x8000, 0x45681910, 5 | BRF_GRA },           // 11
-	{ "pe-0.ic112",		0x8000, 0xa8eeabc8, 5 | BRF_GRA },           // 12
-	{ "pf-0.ic111",		0x8000, 0xe59a2f27, 5 | BRF_GRA },           // 13
-
-	{ "p5-0.ic44",		0x8000, 0x5c6c453c, 6 | BRF_GRA },           // 14 Background Layer 0 tiles
-	{ "p4-0.ic45",		0x8000, 0x59d87a9a, 6 | BRF_GRA },           // 15
-	{ "p3-0.ic46",		0x8000, 0x84884a2e, 6 | BRF_GRA },           // 16
-	{ "p6-0.ic43",		0x8000, 0x8d637639, 6 | BRF_GRA },           // 17
-	{ "p7-0.ic42",		0x8000, 0x71eec4e6, 6 | BRF_GRA },           // 18
-	{ "p8-0.ic41",		0x8000, 0x7fc9704f, 6 | BRF_GRA },           // 19
-
-	{ "po-0.ic131",		0x8000, 0x252976ae, 7 | BRF_GRA },           // 20 Sprite tiles
-	{ "pp-0.ic130",		0x8000, 0xe6f1e8d5, 7 | BRF_GRA },           // 21
-	{ "pq-0.ic129",		0x8000, 0x785381ed, 7 | BRF_GRA },           // 22
-	{ "pr-0.ic128",		0x8000, 0x59754e3d, 7 | BRF_GRA },           // 23
-	{ "pg-0.ic109",		0x8000, 0x4d977f33, 7 | BRF_GRA },           // 24
-	{ "ph-0.ic108",		0x8000, 0x3f3b62a0, 7 | BRF_GRA },           // 25
-	{ "pi-0.ic107",		0x8000, 0x76641ee3, 7 | BRF_GRA },           // 26
-	{ "pj-0.ic106",		0x8000, 0x37671f36, 7 | BRF_GRA },           // 27
-
-	{ "pt-0.ic59",		0x0100, 0xfed32888, 8 | BRF_GRA | BRF_OPT }, // 28 Priority Prom
-};
-
-STD_ROM_PICK(xsleenaba)
-STD_ROM_FN(xsleenaba)
-
-
-ROM_START( xsleena )
-	ROM_REGION( 0x14000, "maincpu", 0 )
-	ROM_LOAD( "s-10.7d",      0x08000, 0x8000, CRC(370164be) SHA1(65c9951cac7dc3943fa4d5f9919ebb4c4f29b3ae) )
-	ROM_LOAD( "s-11.7c",      0x04000, 0x4000, CRC(d22bf859) SHA1(9edb159bef2eba2c5d93c03c15fbcb87eea52236) )
-	ROM_CONTINUE(             0x10000, 0x4000 )
-
-	ROM_REGION( 0x14000, "sub", 0 )
-	ROM_LOAD( "s-2.3b",       0x08000, 0x8000, CRC(a1a860e2) SHA1(fb2b152bfafc44608039774436ddf3b17eed979c) )
-	ROM_LOAD( "s-1.2b",       0x04000, 0x4000, CRC(948b9757) SHA1(3ea840cc47ae6a66f3e5f6a2f3e88475dcfe1840) )
-	ROM_CONTINUE(             0x10000, 0x4000 )
-
-	ROM_REGION( 0x10000, "audiocpu", 0 )
-	ROM_LOAD( "s-3.4s",       0x8000, 0x8000, CRC(a5318cb8) SHA1(35fb28c5598e39f22552bb036ae356b78422f080) )
-
-    ROM_REGION( 0x800, "mcu", 0 )
-    ROM_LOAD( "p1-0.113",     0x000, 0x800, CRC(a432a907) SHA1(4708a40e3a82dec2c5a64bc5da884a37d503cb6b) )
-
-	ROM_REGION( 0x08000, "gfx1", 0 )
-	ROM_LOAD( "s-12.8b",      0x00000, 0x8000, CRC(83c00dd8) SHA1(8e9b19281039b63072270c7a63d9fb30cda570fd) ) /* chars */
-
-	ROM_REGION( 0x40000, "gfx2", 0 )
-	ROM_LOAD( "s-21.16i",     0x00000, 0x8000, CRC(11eb4247) SHA1(5d2f1fa07b8fb1c6bebfdb02c39282d29813791b) ) /* tiles */
-	ROM_LOAD( "s-22.15i",     0x08000, 0x8000, CRC(422b536e) SHA1(d5985c0bd1c840cb6f0da6b177a2caaff6db5a04) )
-	ROM_LOAD( "s-23.14i",     0x10000, 0x8000, CRC(828c1b0c) SHA1(cb9b64073b0ade3885f61545191db4c445e3066b) )
-	ROM_LOAD( "s-24.13i",     0x18000, 0x8000, CRC(d37939e0) SHA1(301d9f6720857c64a4e070444a07a38138ddd4ef) )
-	ROM_LOAD( "s-13.16g",     0x20000, 0x8000, CRC(8f0aa1a7) SHA1(be3fdb6204b77dba28b14c5b880d65d7c1d6a161) )
-	ROM_LOAD( "s-14.15g",     0x28000, 0x8000, CRC(45681910) SHA1(60c3eb4bc08bf11bf09bcd27549c6427fafbb1fb) )
-	ROM_LOAD( "s-15.14g",     0x30000, 0x8000, CRC(a8eeabc8) SHA1(e5dc31df0b223b65144af3602be5bcb2ff9eebbd) )
-	ROM_LOAD( "s-16.13g",     0x38000, 0x8000, CRC(e59a2f27) SHA1(4643cea85f8613c36b416f46f9d1753fa9839237) )
-
-	ROM_REGION( 0x40000, "gfx3", 0 )
-	ROM_LOAD( "s-6.4h",       0x00000, 0x8000, CRC(5c6c453c) SHA1(68c0028d15da8f5e53f09e3d154d18cd9f219601) ) /* tiles */
-	ROM_LOAD( "s-5.4l",       0x08000, 0x8000, CRC(59d87a9a) SHA1(f23cb9a9d6c6249a8a1f8e2acbc235086b008c7b) )
-	ROM_LOAD( "s-4.4m",       0x10000, 0x8000, CRC(84884a2e) SHA1(5087010a72226e91a084a61b5089c110dba7e933) )
-	/* 0x60000-0x67fff empty */
-	ROM_LOAD( "s-7.4f",       0x20000, 0x8000, CRC(8d637639) SHA1(301a7893de8f1bb526f5075e2af8203b8af4b0d3) )
-	ROM_LOAD( "s-8.4d",       0x28000, 0x8000, CRC(71eec4e6) SHA1(3417c52a39a6fc43c51ad707168180f54153177a) )
-	ROM_LOAD( "s-9.4c",       0x30000, 0x8000, CRC(7fc9704f) SHA1(b6f353fb7fec58f68b9e28be2aa29146ac64ffd4) )
-	/* 0x80000-0x87fff empty */
-
-	ROM_REGION( 0x40000, "gfx4", 0 )
-	ROM_LOAD( "s-25.10i",     0x00000, 0x8000, CRC(252976ae) SHA1(534c9148d33e453f3541543a8c0eb4afc59c7de8) ) /* sprites */
-	ROM_LOAD( "s-26.9i",      0x08000, 0x8000, CRC(e6f1e8d5) SHA1(2ee0227361d1f1358f5b5964dab7e691243cd9ae) )
-	ROM_LOAD( "s-27.8i",      0x10000, 0x8000, CRC(785381ed) SHA1(95bf4eb29830c589a9793a4138e645e5b77f0c06) )
-	ROM_LOAD( "s-28.7i",      0x18000, 0x8000, CRC(59754e3d) SHA1(d1781dbc83965fc84492f7282d6813507ba1e81b) )
-	ROM_LOAD( "s-17.10g",     0x20000, 0x8000, CRC(4d977f33) SHA1(30b446ddb2f32354334ea780c435f2407d128808) )
-	ROM_LOAD( "s-18.9g",      0x28000, 0x8000, CRC(3f3b62a0) SHA1(ab7e8f0ff707771401e679b6151ad0ea85cfc792) )
-	ROM_LOAD( "s-19.8g",      0x30000, 0x8000, CRC(76641ee3) SHA1(8fba0fa6639e7bdfb3f7be5e945a55b64411d242) )
-	ROM_LOAD( "s-20.7g",      0x38000, 0x8000, CRC(37671f36) SHA1(1494eec4ecde9ae1f1101aa13eb301b3f3d06602) )
-
-	ROM_REGION( 0x0100, "proms", 0 ) /* Priority */
-	ROM_LOAD( "mb7114e.59",   0x0000, 0x0100, CRC(fed32888) SHA1(4e9330456b20f7198c1e27ca1ae7200f25595599) )	/* timing? (not used) */
-ROM_END
-
-ROM_START( xsleenab )
-	ROM_REGION( 0x14000, "maincpu", 0 )
-	ROM_LOAD( "1.rom",        0x08000, 0x8000, CRC(79f515a7) SHA1(e61f18e3639dd9afe16c7bcb90fa7be31905e2c6) )
-	ROM_LOAD( "s-11.7c",      0x04000, 0x4000, CRC(d22bf859) SHA1(9edb159bef2eba2c5d93c03c15fbcb87eea52236) )
-	ROM_CONTINUE(             0x10000, 0x4000 )
-
-	ROM_REGION( 0x14000, "sub", 0 )
-	ROM_LOAD( "s-2.3b",       0x08000, 0x8000, CRC(a1a860e2) SHA1(fb2b152bfafc44608039774436ddf3b17eed979c) )
-	ROM_LOAD( "s-1.2b",       0x04000, 0x4000, CRC(948b9757) SHA1(3ea840cc47ae6a66f3e5f6a2f3e88475dcfe1840) )
-	ROM_CONTINUE(             0x10000, 0x4000 )
-
-	ROM_REGION( 0x10000, "audiocpu", 0 )
-	ROM_LOAD( "s-3.4s",       0x8000, 0x8000, CRC(a5318cb8) SHA1(35fb28c5598e39f22552bb036ae356b78422f080) )
-
-	ROM_REGION( 0x08000, "gfx1", 0 )
-	ROM_LOAD( "s-12.8b",      0x00000, 0x8000, CRC(83c00dd8) SHA1(8e9b19281039b63072270c7a63d9fb30cda570fd) ) /* chars */
-
-	ROM_REGION( 0x40000, "gfx2", 0 )
-	ROM_LOAD( "s-21.16i",     0x00000, 0x8000, CRC(11eb4247) SHA1(5d2f1fa07b8fb1c6bebfdb02c39282d29813791b) ) /* tiles */
-	ROM_LOAD( "s-22.15i",     0x08000, 0x8000, CRC(422b536e) SHA1(d5985c0bd1c840cb6f0da6b177a2caaff6db5a04) )
-	ROM_LOAD( "s-23.14i",     0x10000, 0x8000, CRC(828c1b0c) SHA1(cb9b64073b0ade3885f61545191db4c445e3066b) )
-	ROM_LOAD( "s-24.13i",     0x18000, 0x8000, CRC(d37939e0) SHA1(301d9f6720857c64a4e070444a07a38138ddd4ef) )
-	ROM_LOAD( "s-13.16g",     0x20000, 0x8000, CRC(8f0aa1a7) SHA1(be3fdb6204b77dba28b14c5b880d65d7c1d6a161) )
-	ROM_LOAD( "s-14.15g",     0x28000, 0x8000, CRC(45681910) SHA1(60c3eb4bc08bf11bf09bcd27549c6427fafbb1fb) )
-	ROM_LOAD( "s-15.14g",     0x30000, 0x8000, CRC(a8eeabc8) SHA1(e5dc31df0b223b65144af3602be5bcb2ff9eebbd) )
-	ROM_LOAD( "s-16.13g",     0x38000, 0x8000, CRC(e59a2f27) SHA1(4643cea85f8613c36b416f46f9d1753fa9839237) )
-
-	ROM_REGION( 0x40000, "gfx3", 0 )
-	ROM_LOAD( "s-6.4h",       0x00000, 0x8000, CRC(5c6c453c) SHA1(68c0028d15da8f5e53f09e3d154d18cd9f219601) ) /* tiles */
-	ROM_LOAD( "s-5.4l",       0x08000, 0x8000, CRC(59d87a9a) SHA1(f23cb9a9d6c6249a8a1f8e2acbc235086b008c7b) )
-	ROM_LOAD( "s-4.4m",       0x10000, 0x8000, CRC(84884a2e) SHA1(5087010a72226e91a084a61b5089c110dba7e933) )
-	/* 0x60000-0x67fff empty */
-	ROM_LOAD( "s-7.4f",       0x20000, 0x8000, CRC(8d637639) SHA1(301a7893de8f1bb526f5075e2af8203b8af4b0d3) )
-	ROM_LOAD( "s-8.4d",       0x28000, 0x8000, CRC(71eec4e6) SHA1(3417c52a39a6fc43c51ad707168180f54153177a) )
-	ROM_LOAD( "s-9.4c",       0x30000, 0x8000, CRC(7fc9704f) SHA1(b6f353fb7fec58f68b9e28be2aa29146ac64ffd4) )
-	/* 0x80000-0x87fff empty */
-
-	ROM_REGION( 0x40000, "gfx4", 0 )
-	ROM_LOAD( "s-25.10i",     0x00000, 0x8000, CRC(252976ae) SHA1(534c9148d33e453f3541543a8c0eb4afc59c7de8) ) /* sprites */
-	ROM_LOAD( "s-26.9i",      0x08000, 0x8000, CRC(e6f1e8d5) SHA1(2ee0227361d1f1358f5b5964dab7e691243cd9ae) )
-	ROM_LOAD( "s-27.8i",      0x10000, 0x8000, CRC(785381ed) SHA1(95bf4eb29830c589a9793a4138e645e5b77f0c06) )
-	ROM_LOAD( "s-28.7i",      0x18000, 0x8000, CRC(59754e3d) SHA1(d1781dbc83965fc84492f7282d6813507ba1e81b) )
-	ROM_LOAD( "s-17.10g",     0x20000, 0x8000, CRC(4d977f33) SHA1(30b446ddb2f32354334ea780c435f2407d128808) )
-	ROM_LOAD( "s-18.9g",      0x28000, 0x8000, CRC(3f3b62a0) SHA1(ab7e8f0ff707771401e679b6151ad0ea85cfc792) )
-	ROM_LOAD( "s-19.8g",      0x30000, 0x8000, CRC(76641ee3) SHA1(8fba0fa6639e7bdfb3f7be5e945a55b64411d242) )
-	ROM_LOAD( "s-20.7g",      0x38000, 0x8000, CRC(37671f36) SHA1(1494eec4ecde9ae1f1101aa13eb301b3f3d06602) )
-
-	ROM_REGION( 0x0100, "proms", 0 ) /* Priority */
-	ROM_LOAD( "mb7114e.59",   0x0000, 0x0100, CRC(fed32888) SHA1(4e9330456b20f7198c1e27ca1ae7200f25595599) )	/* timing? (not used) */
-ROM_END
-
-ROM_START( solarwar )
-	ROM_REGION( 0x14000, "maincpu", 0 )
-	ROM_LOAD( "p9-0.bin",     0x08000, 0x8000, CRC(8ff372a8) SHA1(0fc396e662419fb9cb5bea11748aa8e0e8d072e6) )
-	ROM_LOAD( "pa-0.bin",     0x04000, 0x4000, CRC(154f946f) SHA1(25b776eb9c494e5302795ae79e494cbfc7c104b1) )
-	ROM_CONTINUE(             0x10000, 0x4000 )
-
-	ROM_REGION( 0x14000, "sub", 0 )
-	ROM_LOAD( "p1-0.bin",     0x08000, 0x8000, CRC(f5f235a3) SHA1(9f57dd7c5e514afa750edc6da6d263bf1e913c14) )
-	ROM_LOAD( "p0-0.bin",     0x04000, 0x4000, CRC(51ae95ae) SHA1(e03f7ccb0b33b05547577c60a7f92dc75e24b4d6) )
-	ROM_CONTINUE(             0x10000, 0x4000 )
-
-	ROM_REGION( 0x10000, "audiocpu", 0 )
-	ROM_LOAD( "s-3.4s",       0x8000, 0x8000, CRC(a5318cb8) SHA1(35fb28c5598e39f22552bb036ae356b78422f080) )
-
-    ROM_REGION( 0x800, "mcu", 0 )
-    ROM_LOAD( "p1-0.113",     0x000, 0x800, CRC(a432a907) SHA1(4708a40e3a82dec2c5a64bc5da884a37d503cb6b) )
-
-	ROM_REGION( 0x08000, "gfx1", 0 )
-	ROM_LOAD( "s-12.8b",      0x00000, 0x8000, CRC(83c00dd8) SHA1(8e9b19281039b63072270c7a63d9fb30cda570fd) ) /* chars */
-
-	ROM_REGION( 0x40000, "gfx2", 0 )
-	ROM_LOAD( "s-21.16i",     0x00000, 0x8000, CRC(11eb4247) SHA1(5d2f1fa07b8fb1c6bebfdb02c39282d29813791b) ) /* tiles */
-	ROM_LOAD( "s-22.15i",     0x08000, 0x8000, CRC(422b536e) SHA1(d5985c0bd1c840cb6f0da6b177a2caaff6db5a04) )
-	ROM_LOAD( "s-23.14i",     0x10000, 0x8000, CRC(828c1b0c) SHA1(cb9b64073b0ade3885f61545191db4c445e3066b) )
-	ROM_LOAD( "pn-0.bin",     0x18000, 0x8000, CRC(d2ed6f94) SHA1(155a0d1d978f07517400d0c602fc40657f8569dc) )
-	ROM_LOAD( "s-13.16g",     0x20000, 0x8000, CRC(8f0aa1a7) SHA1(be3fdb6204b77dba28b14c5b880d65d7c1d6a161) )
-	ROM_LOAD( "s-14.15g",     0x28000, 0x8000, CRC(45681910) SHA1(60c3eb4bc08bf11bf09bcd27549c6427fafbb1fb) )
-	ROM_LOAD( "s-15.14g",     0x30000, 0x8000, CRC(a8eeabc8) SHA1(e5dc31df0b223b65144af3602be5bcb2ff9eebbd) )
-	ROM_LOAD( "pf-0.bin",     0x38000, 0x8000, CRC(6e627a77) SHA1(1d16031acd53c9e691ae7eac8a6f1ae3954fac8c) )
-
-	ROM_REGION( 0x40000, "gfx3", 0 )
-	ROM_LOAD( "s-6.4h",       0x00000, 0x8000, CRC(5c6c453c) SHA1(68c0028d15da8f5e53f09e3d154d18cd9f219601) ) /* tiles */
-	ROM_LOAD( "s-5.4l",       0x08000, 0x8000, CRC(59d87a9a) SHA1(f23cb9a9d6c6249a8a1f8e2acbc235086b008c7b) )
-	ROM_LOAD( "s-4.4m",       0x10000, 0x8000, CRC(84884a2e) SHA1(5087010a72226e91a084a61b5089c110dba7e933) )
-	/* 0x60000-0x67fff empty */
-	ROM_LOAD( "s-7.4f",       0x20000, 0x8000, CRC(8d637639) SHA1(301a7893de8f1bb526f5075e2af8203b8af4b0d3) )
-	ROM_LOAD( "s-8.4d",       0x28000, 0x8000, CRC(71eec4e6) SHA1(3417c52a39a6fc43c51ad707168180f54153177a) )
-	ROM_LOAD( "s-9.4c",       0x30000, 0x8000, CRC(7fc9704f) SHA1(b6f353fb7fec58f68b9e28be2aa29146ac64ffd4) )
-	/* 0x80000-0x87fff empty */
-
-	ROM_REGION( 0x40000, "gfx4", 0 )
-	ROM_LOAD( "s-25.10i",     0x00000, 0x8000, CRC(252976ae) SHA1(534c9148d33e453f3541543a8c0eb4afc59c7de8) )	/* sprites */
-	ROM_LOAD( "s-26.9i",      0x08000, 0x8000, CRC(e6f1e8d5) SHA1(2ee0227361d1f1358f5b5964dab7e691243cd9ae) )
-	ROM_LOAD( "s-27.8i",      0x10000, 0x8000, CRC(785381ed) SHA1(95bf4eb29830c589a9793a4138e645e5b77f0c06) )
-	ROM_LOAD( "s-28.7i",      0x18000, 0x8000, CRC(59754e3d) SHA1(d1781dbc83965fc84492f7282d6813507ba1e81b) )
-	ROM_LOAD( "s-17.10g",     0x20000, 0x8000, CRC(4d977f33) SHA1(30b446ddb2f32354334ea780c435f2407d128808) )
-	ROM_LOAD( "s-18.9g",      0x28000, 0x8000, CRC(3f3b62a0) SHA1(ab7e8f0ff707771401e679b6151ad0ea85cfc792) )
-	ROM_LOAD( "s-19.8g",      0x30000, 0x8000, CRC(76641ee3) SHA1(8fba0fa6639e7bdfb3f7be5e945a55b64411d242) )
-	ROM_LOAD( "s-20.7g",      0x38000, 0x8000, CRC(37671f36) SHA1(1494eec4ecde9ae1f1101aa13eb301b3f3d06602) )
-
-	ROM_REGION( 0x0100, "proms", 0 ) /* Priority */
-	ROM_LOAD( "mb7114e.59",   0x0000, 0x0100, CRC(fed32888) SHA1(4e9330456b20f7198c1e27ca1ae7200f25595599) )	/* timing? (not used) */
-ROM_END
-
-#endif
+GAME( 1986, xsleena,	0,	  xsleena,   xsleena,	0,   ROT0,  "Technos Japan (Taito license)", "Xain'd Sleena (World)", 0 )
+GAME( 1986, xsleenaj,	xsleena,  xsleena,   xsleena,	0,   ROT0,  "Technos Japan", "Xain'd Sleena (Japan)", 0 )
+GAME( 1986, solrwarr,	xsleena,  xsleena,   xsleena,	0,   ROT0,  "Technos Japan (Taito license)", "Solar-Warrior (US)", 0 )
+GAME( 1986, xsleenab,	xsleena,  xsleenab,  xsleena,	0,   ROT0,  "bootleg", "Xain'd Sleena (bootleg)", 0 )
+GAME( 1987, xsleenaba,	xsleena,  xsleenab,  xsleena,	0,   ROT0,  "bootleg", "Xain'd Sleena (bootleg, bugfixed)", 0 ) // newer bootleg, fixes some of the issues with the other one
