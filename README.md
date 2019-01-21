@@ -1,15 +1,15 @@
 
-	M.B.A-mini (M.B.A = MAME's skeleton + FBA's romsets)
+	M.B.A-more (M.B.A = MAME's skeleton + FBA's romsets)
 
-	M.B.A-mini from MAME2010-libretro (https://github.com/libretro/mame2010-libretro)
-	After the codes is streamlined, only CPS 1/2,NEOGEO,IREM M92 roms is supported.
+	M.B.A-more from MAME2010-libretro (https://github.com/libretro/mame2010-libretro)
+	After the codes is streamlined, try to support the famous roms (compatible with FBA 02.97.38 romsets).
 
 	Build for android:
 		make -f makefile "NATIVE=1" buildtools
 		make -f makefile platform=android
      
 	Build for pc linux/win:
-		make -f makefile platform= #platform name
+		make -f makefile platform= #platform name#
 		(NB: for 64 bits build export PTR64=1 at least on win64)
 
 	JOYPAD controls are: 
