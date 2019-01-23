@@ -28,11 +28,11 @@ Top Tile layout.
 Sprite layout.
   0          1          2          3          4
   ---- ----  ---- ----  ---- xxxx  xxxx xxxx  ---- ----  = Sprite number
-  ---- ----  ---- ----  -xxx ----  ---- ----  ---- ----  = Color
+  ---- ----  ---- ----  xxxx ----  ---- ----  ---- ----  = Color
   xxxx xxxx  ---- ----  ---- ----  ---- ----  ---- ----  = Y position
   ---- ----  ---- ---x  ---- ----  ---- ----  ---- ----  = Y MSb position ???
   ---- ----  ---- ----  ---- ----  ---- ----  xxxx xxxx  = X position
-  ---- ----  ---- --x-  ---- ----  ---- ----  ---- ----  = X MSb position ???
+  ---- ----  ---- --x-  ---- ----  ---- ----  ---- ----  = X position Msb
   ---- ----  ---- -x--  ---- ----  ---- ----  ---- ----  = Y Flip
   ---- ----  ---- x---  ---- ----  ---- ----  ---- ----  = X Flip
   ---- ----  --xx ----  ---- ----  ---- ----  ---- ----  = Sprite Dimension
@@ -61,11 +61,9 @@ static TILE_GET_INFO( get_bg_tile_info )
 	ddragon_state *state = machine->driver_data<ddragon_state>();
 
 	UINT8 attr = state->bgvideoram[2 * tile_index];
-	SET_TILE_INFO(
-			2,
-			state->bgvideoram[2 * tile_index+1] + ((attr & 0x07) << 8),
-			(attr >> 3) & 0x07,
-			TILE_FLIPYX((attr & 0xc0) >> 6));
+	SET_TILE_INFO(	2,
+			state->bgvideoram[2 * tile_index + 1] + ((attr & 0x07) << 8),
+			(attr >> 3) & 0x07, TILE_FLIPYX((attr & 0xc0) >> 6) );
 }
 
 static TILE_GET_INFO( get_fg_tile_info )
@@ -73,11 +71,9 @@ static TILE_GET_INFO( get_fg_tile_info )
 	ddragon_state *state = machine->driver_data<ddragon_state>();
 
 	UINT8 attr = state->fgvideoram[2 * tile_index];
-	SET_TILE_INFO(
-			0,
+	SET_TILE_INFO(	0,
 			state->fgvideoram[2 * tile_index + 1] + ((attr & 0x07) << 8),
-			attr >> 5,
-			0);
+			attr >> 5, 0 );
 }
 
 static TILE_GET_INFO( get_fg_16color_tile_info )
@@ -85,11 +81,9 @@ static TILE_GET_INFO( get_fg_16color_tile_info )
 	ddragon_state *state = machine->driver_data<ddragon_state>();
 
 	UINT8 attr = state->fgvideoram[2 * tile_index];
-	SET_TILE_INFO(
-			0,
-			state->fgvideoram[2 * tile_index+1] + ((attr & 0x0f) << 8),
-			attr >> 4,
-			0);
+	SET_TILE_INFO(	0,
+			state->fgvideoram[2 * tile_index + 1] + ((attr & 0x0f) << 8),
+			attr >> 4, 0 );
 }
 
 
@@ -155,52 +149,50 @@ WRITE8_HANDLER( ddragon_fgvideoram_w )
 
 ***************************************************************************/
 
-#define DRAW_SPRITE( order, sx, sy ) drawgfx_transpen( bitmap, \
-					cliprect,gfx, \
-					(which + order),color,flipx,flipy,sx,sy,0);
+#define DRAW_SPRITE(order, sx, sy)	drawgfx_transpen(bitmap,	\
+					cliprect, gfx,			\
+					(which + order), color, flipx, flipy, sx, sy, 0);
 
-static void draw_sprites( running_machine* machine, bitmap_t *bitmap,const rectangle *cliprect )
+
+static void draw_sprites(running_machine *machine, bitmap_t *bitmap, const rectangle *cliprect)
 {
 	ddragon_state *state = machine->driver_data<ddragon_state>();
 
 	const gfx_element *gfx = machine->gfx[1];
+	const UINT8 *src = (UINT8 *)state->spriteram;
+	const UINT32 len = state->spriteram_size;
+	INT32 attr, sx, sy, size, flipx, flipy, dx, dy, which, color;
 
-	UINT8 *src;
-	int i;
-
-	if (state->technos_video_hw == 1)		/* China Gate Sprite RAM */
-		src = (UINT8 *) (state->spriteram);
-	else
-		src = (UINT8 *) (&(state->spriteram[0x800]));
-
-	for (i = 0; i < (64 * 5); i += 5)
+	for (int i = 0; i < len / 2; i += 5)
 	{
-		int attr = src[i + 1];
+		attr = src[i + 1];
 		if (attr & 0x80)  /* visible */
 		{
-			int sx = 240 - src[i + 4] + ((attr & 2) << 7);
-			int sy = 232 - src[i + 0] + ((attr & 1) << 8);
-			int size = (attr & 0x30) >> 4;
-			int flipx = (attr & 8);
-			int flipy = (attr & 4);
-			int dx = -16,dy = -16;
-
-			int which;
-			int color;
+			sx = 240 - src[i + 4] + ((attr & 0x02) << 7);
+			sy = 232 - src[i + 0] + ((attr & 0x01) << 8);
+			size = (attr & 0x30) >> 4;
+			flipx = attr & 0x08;
+			flipy = attr & 0x04;
+			dx = dy = -16;
 
 			if (state->technos_video_hw == 2)		/* Double Dragon 2 */
 			{
-				color = (src[i + 2] >> 5);
+				color = src[i + 2] >> 5;
 				which = src[i + 3] + ((src[i + 2] & 0x1f) << 8);
 			}
 			else
 			{
-				if (state->technos_video_hw == 1)		/* China Gate */
+				if (state->technos_video_hw == 1)	/* China Gate */
 				{
-					if ((sx < -7) && (sx > -16)) sx += 256; /* fix sprite clip */
-					if ((sy < -7) && (sy > -16)) sy += 256; /* fix sprite clip */
+					/* fix sprite clip */
+					if ((sx < -7) && (sx > -16))
+						sx += 256;
+
+					/* fix sprite clip */
+					if ((sy < -7) && (sy > -16))
+						sy += 256;
 				}
-				color = (src[i + 2] >> 4) & 0x07;
+				color = src[i + 2] >> 4;
 				which = src[i + 3] + ((src[i + 2] & 0x0f) << 8);
 			}
 
@@ -218,16 +210,16 @@ static void draw_sprites( running_machine* machine, bitmap_t *bitmap,const recta
 
 			switch (size)
 			{
-				case 0: /* normal */
+				case 0:	/* normal */
 				DRAW_SPRITE(0, sx, sy);
 				break;
 
-				case 1: /* double y */
+				case 1:	/* double y */
 				DRAW_SPRITE(0, sx, sy + dy);
 				DRAW_SPRITE(1, sx, sy);
 				break;
 
-				case 2: /* double x */
+				case 2:	/* double x */
 				DRAW_SPRITE(0, sx + dx, sy);
 				DRAW_SPRITE(2, sx, sy);
 				break;
@@ -256,8 +248,9 @@ VIDEO_UPDATE( ddragon )
 	tilemap_set_scrollx(state->bg_tilemap, 0, scrollx);
 	tilemap_set_scrolly(state->bg_tilemap, 0, scrolly);
 
-	tilemap_draw(bitmap,cliprect, state->bg_tilemap,0,0);
+	tilemap_draw(bitmap, cliprect, state->bg_tilemap, 0, 0);
 	draw_sprites(screen->machine, bitmap, cliprect);
 	tilemap_draw(bitmap, cliprect, state->fg_tilemap, 0, 0);
+
 	return 0;
 }

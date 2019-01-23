@@ -107,7 +107,7 @@ Dip locations verified with manual for ddragon & ddragon2
     Since MAME's video timing is 0-based, we need to convert this.
 */
 
-INLINE int scanline_to_vcount( int scanline )
+INLINE int scanline_to_vcount(int scanline)
 {
 	int vcount = scanline + 8;
 
@@ -130,15 +130,14 @@ static TIMER_DEVICE_CALLBACK( ddragon_scanline )
 	if (scanline > 0)
 		timer.machine->primary_screen->update_partial(scanline - 1);
 
-	/* on the rising edge of VBLK (vcount == F8), signal an NMI */
-	if (vcount == 0xf8)
+	/* on the rising edge of VBLK (vcount == 0xF8), signal an NMI */
+	if (vcount == 248)
 		cpu_set_input_line(state->maincpu, INPUT_LINE_NMI, ASSERT_LINE);
 
 	/* set 1ms signal on rising edge of vcount & 8 */
-	if (!(vcount_old & 8) && (vcount & 8))
+	if (!(vcount_old & 0x08) && (vcount & 0x08))
 		cpu_set_input_line(state->maincpu, M6809_FIRQ_LINE, ASSERT_LINE);
 }
-
 
 
 /*************************************
@@ -161,9 +160,9 @@ static MACHINE_START( ddragon )
 	state->adpcm_2 = machine->device("adpcm2");
 
 	/* register for save states */
-	state_save_register_global(machine, state->dd_sub_cpu_busy);
 	state_save_register_global(machine, state->scrollx_hi);
 	state_save_register_global(machine, state->scrolly_hi);
+	state_save_register_global(machine, state->ddragon_sub_port);
 	state_save_register_global_array(machine, state->adpcm_pos);
 	state_save_register_global_array(machine, state->adpcm_end);
 	state_save_register_global_array(machine, state->adpcm_idle);
@@ -175,15 +174,14 @@ static MACHINE_RESET( ddragon )
 {
 	ddragon_state *state = machine->driver_data<ddragon_state>();
 
-	state->dd_sub_cpu_busy = 1;
+	state->scrollx_hi = 0;
+	state->scrolly_hi = 0;
+	state->ddragon_sub_port = 0;
 	state->adpcm_pos[0] = state->adpcm_pos[1] = 0;
 	state->adpcm_end[0] = state->adpcm_end[1] = 0;
 	state->adpcm_idle[0] = state->adpcm_idle[1] = 1;
 	state->adpcm_data[0] = state->adpcm_data[1] = -1;
-	state->scrollx_hi = 0;
-	state->scrolly_hi = 0;
 }
-
 
 
 /*************************************
@@ -195,46 +193,38 @@ static MACHINE_RESET( ddragon )
 static WRITE8_HANDLER( ddragon_bankswitch_w )
 {
 	ddragon_state *state = space->machine->driver_data<ddragon_state>();
+	/*
+		7 6 5 4 3 2 1 0
+		. . . . . . . x		// X-scroll D9 (H9BT)
+		. . . . . . x .		// Y-scroll D9 (V9BT)
+		. . . . . x . .		// Screen flip (*1P/2P)
+		. . . . x . . .		// Sub CPU reset (*RESET)
+		. . . x . . . .		// Sub CPU halt (*HALT)
+		x x x . . . . .		// ROM bank (*BANK)
+	*/
 
-	state->scrollx_hi = (data & 0x01);
-	state->scrolly_hi = ((data & 0x02) >> 1);
+	state->scrollx_hi = data & 0x01;
+	state->scrolly_hi = (data & 0x02) >> 1;
 	flip_screen_set(space->machine, ~data & 0x04);
 
-	/* bit 3 unknown */
-
-	if (data & 0x10)
-		state->dd_sub_cpu_busy = 0;
-	else if (state->dd_sub_cpu_busy == 0)
-		cpu_set_input_line(state->sub_cpu, state->sprite_irq, (state->sprite_irq == INPUT_LINE_NMI) ? PULSE_LINE : HOLD_LINE);
+	cpu_set_input_line(state->sub_cpu, INPUT_LINE_RESET, (data & 0x08) ? CLEAR_LINE : ASSERT_LINE);
+	cpu_set_input_line(state->sub_cpu, INPUT_LINE_HALT,  (data & 0x10) ? ASSERT_LINE : CLEAR_LINE);
 
 	memory_set_bank(space->machine, "bank1", (data & 0xe0) >> 5);
 }
 
 static READ8_HANDLER( darktowr_mcu_bank_r )
 {
+/*	Horrible hack - the alternate TStrike set is mismatched against the MCU,
+	so just hack around the protection here.  (The hacks are 'right' as I have
+	the original source code & notes to this version of TStrike to examine).
+*/
 	ddragon_state *state = space->machine->driver_data<ddragon_state>();
-	// logerror("BankRead %05x %08x\n",cpu_get_pc(space->cpu),offset);
 
-	/* Horrible hack - the alternate TStrike set is mismatched against the MCU,
-   so just hack around the protection here.  (The hacks are 'right' as I have
-   the original source code & notes to this version of TStrike to examine).
-   */
-	if (!strcmp(space->machine->gamedrv->name, "tstrike"))
-	{
-		/* Static protection checks at boot-up */
-		if (cpu_get_pc(space->cpu) == 0x9ace)
-			return 0;
-		if (cpu_get_pc(space->cpu) == 0x9ae4)
-			return 0x63;
-
-		/* Just return whatever the code is expecting */
-		return state->rambase[0xbe1];
-	}
-
-	if (offset == 0x1401 || offset == 1)
+	if (offset == 0x1401 || offset == 0x01)
 		return state->darktowr_mcu_ports[0];
 
-	logerror("Unmapped mcu bank read %04x\n",offset);
+	logerror("Unmapped mcu bank read %04x\n", offset);
 
 	return 0xff;
 }
@@ -248,8 +238,8 @@ static WRITE8_HANDLER( darktowr_mcu_bank_w )
 
 	if (offset == 0x1400 || offset == 0)
 	{
-		state->darktowr_mcu_ports[1] = BITSWAP8(data,0,1,2,3,4,5,6,7);
-		logerror("MCU PORT 1 -> %04x (from %04x)\n", BITSWAP8(data,0,1,2,3,4,5,6,7), data);
+		state->darktowr_mcu_ports[1] = BITSWAP8(data, 0, 1, 2, 3, 4, 5, 6, 7);
+		logerror("MCU PORT 1 -> %04x (from %04x)\n", BITSWAP8(data, 0, 1, 2, 3, 4, 5, 6, 7), data);
 	}
 }
 
@@ -258,28 +248,21 @@ static WRITE8_HANDLER( darktowr_bankswitch_w )
 {
 	ddragon_state *state = space->machine->driver_data<ddragon_state>();
 
+	state->scrollx_hi = data & 0x01;
+	state->scrolly_hi = (data & 0x02) >> 1;
+
+	cpu_set_input_line(state->sub_cpu, INPUT_LINE_RESET, (data & 0x08) ? CLEAR_LINE : ASSERT_LINE);
+	cpu_set_input_line(state->sub_cpu, INPUT_LINE_HALT,  (data & 0x10) ? ASSERT_LINE : CLEAR_LINE);
+
 	int oldbank = memory_get_bank(space->machine, "bank1");
 	int newbank = (data & 0xe0) >> 5;
-
-	state->scrollx_hi = (data & 0x01);
-	state->scrolly_hi = ((data & 0x02) >> 1);
-
-//  flip_screen_set(space->machine, ~data & 0x04);
-
-	/* bit 3 unknown */
-
-	if (data & 0x10)
-		state->dd_sub_cpu_busy = 0;
-	else if (state->dd_sub_cpu_busy == 0)
-		cpu_set_input_line(state->sub_cpu, state->sprite_irq, (state->sprite_irq == INPUT_LINE_NMI) ? PULSE_LINE : HOLD_LINE);
-
 	memory_set_bank(space->machine, "bank1", newbank);
+
 	if (newbank == 4 && oldbank != 4)
 		memory_install_readwrite8_handler(space, 0x4000, 0x7fff, 0, 0, darktowr_mcu_bank_r, darktowr_mcu_bank_w);
 	else if (newbank != 4 && oldbank == 4)
 		memory_install_readwrite_bank(space, 0x4000, 0x7fff, 0, 0, "bank1");
 }
-
 
 
 /*************************************
@@ -288,7 +271,8 @@ static WRITE8_HANDLER( darktowr_bankswitch_w )
  *
  *************************************/
 
-static WRITE8_HANDLER( ddragon_interrupt_w )
+// static WRITE8_HANDLER( ddragon_interrupt_w )
+static void ddragon_interrupt_ack(address_space *space, offs_t offset, UINT8 data)
 {
 	ddragon_state *state = space->machine->driver_data<ddragon_state>();
 
@@ -311,12 +295,23 @@ static WRITE8_HANDLER( ddragon_interrupt_w )
 			cpu_set_input_line(state->snd_cpu, state->sound_irq, (state->sound_irq == INPUT_LINE_NMI) ? PULSE_LINE : HOLD_LINE);
 			break;
 
-		case 4: /* 380f - ? */
-			/* Not sure what this is - almost certainly related to the sprite mcu */
+		case 4: /* 380f - MCU IRQ */
+			if (state->sub_cpu != NULL)
+				cpu_set_input_line(state->sub_cpu, state->sprite_irq, ASSERT_LINE);
 			break;
 	}
 }
 
+static READ8_HANDLER(ddragon_interrupt_r)
+{
+	ddragon_interrupt_ack(space, offset, 0xff);
+	return 0xff;
+}
+
+static WRITE8_HANDLER(ddragon_interrupt_w)
+{
+	ddragon_interrupt_ack(space, offset, data);
+}
 
 static WRITE8_HANDLER( ddragon2_sub_irq_ack_w )
 {
@@ -335,9 +330,29 @@ static WRITE8_HANDLER( ddragon2_sub_irq_w )
 static void irq_handler( running_device *device, int irq )
 {
 	ddragon_state *state = device->machine->driver_data<ddragon_state>();
-	cpu_set_input_line(state->snd_cpu, state->ym_irq , irq ? ASSERT_LINE : CLEAR_LINE );
+	cpu_set_input_line(state->snd_cpu, state->ym_irq , irq ? ASSERT_LINE : CLEAR_LINE);
 }
 
+static READ8_HANDLER(soundlatch_ack_r)
+{
+	ddragon_state *state = space->machine->driver_data<ddragon_state>();
+
+	cpu_set_input_line(state->snd_cpu, state->sound_irq, CLEAR_LINE);
+	return soundlatch_r(space, 0);
+}
+
+static WRITE8_HANDLER(ddragonba_port_w)
+{
+	ddragon_state *state = space->machine->driver_data<ddragon_state>();
+
+	if ((data & 0x08) == 0)
+		cpu_set_input_line(state->sub_cpu, state->sprite_irq, CLEAR_LINE);
+
+	if (!(state->ddragon_sub_port & 0x10) && (data & 0x10))
+		cpu_set_input_line(state->maincpu, M6809_IRQ_LINE, ASSERT_LINE);
+
+	state->ddragon_sub_port = data;
+}
 
 
 /*************************************
@@ -346,10 +361,14 @@ static void irq_handler( running_device *device, int irq )
  *
  *************************************/
 
-static CUSTOM_INPUT( sub_cpu_busy )
+static CUSTOM_INPUT( subcpu_bus_free )
 {
 	ddragon_state *state = field->port->machine->driver_data<ddragon_state>();
-	return state->dd_sub_cpu_busy;
+
+	if (state->sub_cpu != NULL)	// Corresponds to BA (Bus Available) on the HD63701
+		return field->port->machine->device<cpu_device>("sub")->suspended(SUSPEND_REASON_RESET | SUSPEND_REASON_HALT);
+	else
+		return 0;
 }
 
 
@@ -372,20 +391,18 @@ static WRITE8_HANDLER( ddragon_hd63701_internal_registers_w )
 {
 	ddragon_state *state = space->machine->driver_data<ddragon_state>();
 
-	/* I don't know why port 0x17 is used..  Doesn't seem to be a standard MCU port */
+	// Port 6
 	if (offset == 0x17)
 	{
-		/* This is a guess, but makes sense.. The mcu definitely interrupts the main cpu.
-        I don't know what bit is the assert and what is the clear though (in comparison
-        it's quite obvious from the Double Dragon 2 code, below). */
-		if (data & 3)
-		{
-			cpu_set_input_line(state->maincpu, M6809_IRQ_LINE, ASSERT_LINE);
+		if (data & 0x01)
 			cpu_set_input_line(state->sub_cpu, state->sprite_irq, CLEAR_LINE);
-		}
+
+		if (!(state->ddragon_sub_port & 0x02) && (data & 0x02))
+			cpu_set_input_line(state->maincpu, M6809_IRQ_LINE, ASSERT_LINE);
+
+		state->ddragon_sub_port = data;
 	}
 }
-
 
 
 /*************************************
@@ -394,28 +411,27 @@ static WRITE8_HANDLER( ddragon_hd63701_internal_registers_w )
  *
  *************************************/
 
-static READ8_HANDLER( ddragon_spriteram_r )
+static READ8_HANDLER( ddragon_comram_r )
 {
 	ddragon_state *state = space->machine->driver_data<ddragon_state>();
 
-	/* Double Dragon crash fix - see notes above */
-	if (offset == 0x49 && cpu_get_pc(space->cpu) == 0x6261 && state->spriteram[offset] == 0x1f)
-		return 0x1;
+	/* Access to shared RAM is prevented when the sub CPU is active */
+	if (!space->machine->device<cpu_device>("sub")->suspended(SUSPEND_REASON_RESET | SUSPEND_REASON_HALT))
+		return 0xff;
 
-	return state->spriteram[offset];
+	return state->comram[offset];
 }
 
 
-static WRITE8_HANDLER( ddragon_spriteram_w )
+static WRITE8_HANDLER( ddragon_comram_w )
 {
 	ddragon_state *state = space->machine->driver_data<ddragon_state>();
 
-	if (space->cpu == state->sub_cpu && offset == 0)
-		state->dd_sub_cpu_busy = 1;
+	if (!space->machine->device<cpu_device>("sub")->suspended(SUSPEND_REASON_RESET | SUSPEND_REASON_HALT))
+		return;
 
-	state->spriteram[offset] = data;
+	state->comram[offset] = data;
 }
-
 
 
 /*************************************
@@ -487,7 +503,6 @@ static READ8_HANDLER( dd_adpcm_status_r )
 }
 
 
-
 /*************************************
  *
  *  Main CPU memory maps
@@ -498,9 +513,9 @@ static ADDRESS_MAP_START( ddragon_map, ADDRESS_SPACE_PROGRAM, 8 )
 	AM_RANGE(0x0000, 0x0fff) AM_RAM AM_BASE_MEMBER(ddragon_state, rambase)
 	AM_RANGE(0x1000, 0x11ff) AM_RAM_WRITE(paletteram_xxxxBBBBGGGGRRRR_split1_w) AM_BASE_GENERIC(paletteram)
 	AM_RANGE(0x1200, 0x13ff) AM_RAM_WRITE(paletteram_xxxxBBBBGGGGRRRR_split2_w) AM_BASE_GENERIC(paletteram2)
-	AM_RANGE(0x1400, 0x17ff) AM_RAM
 	AM_RANGE(0x1800, 0x1fff) AM_RAM_WRITE(ddragon_fgvideoram_w) AM_BASE_MEMBER(ddragon_state, fgvideoram)
-	AM_RANGE(0x2000, 0x2fff) AM_READWRITE(ddragon_spriteram_r, ddragon_spriteram_w) AM_BASE_MEMBER(ddragon_state, spriteram)
+	AM_RANGE(0x2000, 0x21ff) AM_MIRROR(0x0600) AM_READWRITE(ddragon_comram_r, ddragon_comram_w) AM_BASE_MEMBER(ddragon_state, comram)
+	AM_RANGE(0x2800, 0x2fff) AM_RAM AM_BASE_SIZE_MEMBER(ddragon_state, spriteram, spriteram_size)
 	AM_RANGE(0x3000, 0x37ff) AM_RAM_WRITE(ddragon_bgvideoram_w) AM_BASE_MEMBER(ddragon_state, bgvideoram)
 	AM_RANGE(0x3800, 0x3800) AM_READ_PORT("P1")
 	AM_RANGE(0x3801, 0x3801) AM_READ_PORT("P2")
@@ -510,16 +525,16 @@ static ADDRESS_MAP_START( ddragon_map, ADDRESS_SPACE_PROGRAM, 8 )
 	AM_RANGE(0x3808, 0x3808) AM_WRITE(ddragon_bankswitch_w)
 	AM_RANGE(0x3809, 0x3809) AM_WRITEONLY AM_BASE_MEMBER(ddragon_state, scrollx_lo)
 	AM_RANGE(0x380a, 0x380a) AM_WRITEONLY AM_BASE_MEMBER(ddragon_state, scrolly_lo)
-	AM_RANGE(0x380b, 0x380f) AM_WRITE(ddragon_interrupt_w)
+	AM_RANGE(0x380b, 0x380f) AM_READWRITE(ddragon_interrupt_r, ddragon_interrupt_w)
 	AM_RANGE(0x4000, 0x7fff) AM_ROMBANK("bank1")
 	AM_RANGE(0x8000, 0xffff) AM_ROM
 ADDRESS_MAP_END
 
-
 static ADDRESS_MAP_START( dd2_map, ADDRESS_SPACE_PROGRAM, 8 )
 	AM_RANGE(0x0000, 0x17ff) AM_RAM
 	AM_RANGE(0x1800, 0x1fff) AM_RAM_WRITE(ddragon_fgvideoram_w) AM_BASE_MEMBER(ddragon_state, fgvideoram)
-	AM_RANGE(0x2000, 0x2fff) AM_READWRITE(ddragon_spriteram_r, ddragon_spriteram_w) AM_BASE_MEMBER(ddragon_state, spriteram)
+	AM_RANGE(0x2000, 0x21ff) AM_MIRROR(0x0600) AM_READWRITE(ddragon_comram_r, ddragon_comram_w) AM_BASE_MEMBER(ddragon_state, comram)
+	AM_RANGE(0x2800, 0x2fff) AM_RAM AM_BASE_SIZE_MEMBER(ddragon_state, spriteram, spriteram_size)
 	AM_RANGE(0x3000, 0x37ff) AM_RAM_WRITE(ddragon_bgvideoram_w) AM_BASE_MEMBER(ddragon_state, bgvideoram)
 	AM_RANGE(0x3800, 0x3800) AM_READ_PORT("P1")
 	AM_RANGE(0x3801, 0x3801) AM_READ_PORT("P2")
@@ -529,13 +544,12 @@ static ADDRESS_MAP_START( dd2_map, ADDRESS_SPACE_PROGRAM, 8 )
 	AM_RANGE(0x3808, 0x3808) AM_WRITE(ddragon_bankswitch_w)
 	AM_RANGE(0x3809, 0x3809) AM_WRITEONLY AM_BASE_MEMBER(ddragon_state, scrollx_lo)
 	AM_RANGE(0x380a, 0x380a) AM_WRITEONLY AM_BASE_MEMBER(ddragon_state, scrolly_lo)
-	AM_RANGE(0x380b, 0x380f) AM_WRITE(ddragon_interrupt_w)
+	AM_RANGE(0x380b, 0x380f) AM_READWRITE(ddragon_interrupt_r, ddragon_interrupt_w)
 	AM_RANGE(0x3c00, 0x3dff) AM_RAM_WRITE(paletteram_xxxxBBBBGGGGRRRR_split1_w) AM_BASE_GENERIC(paletteram)
 	AM_RANGE(0x3e00, 0x3fff) AM_RAM_WRITE(paletteram_xxxxBBBBGGGGRRRR_split2_w) AM_BASE_GENERIC(paletteram2)
 	AM_RANGE(0x4000, 0x7fff) AM_ROMBANK("bank1")
 	AM_RANGE(0x8000, 0xffff) AM_ROM
 ADDRESS_MAP_END
-
 
 
 /*************************************
@@ -547,38 +561,26 @@ ADDRESS_MAP_END
 static ADDRESS_MAP_START( sub_map, ADDRESS_SPACE_PROGRAM, 8 )
 	AM_RANGE(0x0000, 0x001f) AM_READWRITE(ddragon_hd63701_internal_registers_r, ddragon_hd63701_internal_registers_w)
 	AM_RANGE(0x001f, 0x0fff) AM_RAM
-	AM_RANGE(0x8000, 0x8fff) AM_READWRITE(ddragon_spriteram_r, ddragon_spriteram_w)
+	AM_RANGE(0x8000, 0x8fff) AM_RAM AM_BASE_MEMBER(ddragon_state, comram)
 	AM_RANGE(0xc000, 0xffff) AM_ROM
 ADDRESS_MAP_END
-
 
 static ADDRESS_MAP_START( ddragonba_sub_map, ADDRESS_SPACE_PROGRAM, 8 )
 	AM_RANGE(0x0000, 0x0fff) AM_RAM
-	AM_RANGE(0x8000, 0x8fff) AM_READWRITE(ddragon_spriteram_r, ddragon_spriteram_w)
+	AM_RANGE(0x8000, 0x8fff) AM_RAM AM_BASE_MEMBER(ddragon_state, comram)
 	AM_RANGE(0xc000, 0xffff) AM_ROM
 ADDRESS_MAP_END
 
-
 static ADDRESS_MAP_START( dd2_sub_map, ADDRESS_SPACE_PROGRAM, 8 )
 	AM_RANGE(0x0000, 0xbfff) AM_ROM
-	AM_RANGE(0xc000, 0xc3ff) AM_READWRITE(ddragon_spriteram_r, ddragon_spriteram_w)
+	AM_RANGE(0xc000, 0xc3ff) AM_RAM AM_BASE_MEMBER(ddragon_state, comram)
 	AM_RANGE(0xd000, 0xd000) AM_WRITE(ddragon2_sub_irq_ack_w)
 	AM_RANGE(0xe000, 0xe000) AM_WRITE(ddragon2_sub_irq_w)
 ADDRESS_MAP_END
 
-/* might not be 100% accurate, check bits written */
-static WRITE8_HANDLER( ddragonba_port_w )
-{
-	ddragon_state *state = space->machine->driver_data<ddragon_state>();
-
-	cpu_set_input_line(state->maincpu, M6809_IRQ_LINE, ASSERT_LINE);
-	cpu_set_input_line(state->sub_cpu, state->sprite_irq, CLEAR_LINE );
-}
-
 static ADDRESS_MAP_START( ddragonba_sub_portmap, ADDRESS_SPACE_IO, 8 )
 	AM_RANGE(0x0000, 0xffff) AM_WRITE(ddragonba_port_w)
 ADDRESS_MAP_END
-
 
 
 /*************************************
@@ -589,22 +591,20 @@ ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( sound_map, ADDRESS_SPACE_PROGRAM, 8 )
 	AM_RANGE(0x0000, 0x0fff) AM_RAM
-	AM_RANGE(0x1000, 0x1000) AM_READ(soundlatch_r)
+	AM_RANGE(0x1000, 0x1000) AM_READ(soundlatch_ack_r)
 	AM_RANGE(0x1800, 0x1800) AM_READ(dd_adpcm_status_r)
 	AM_RANGE(0x2800, 0x2801) AM_DEVREADWRITE("fmsnd", ym2151_r, ym2151_w)
 	AM_RANGE(0x3800, 0x3807) AM_WRITE(dd_adpcm_w)
 	AM_RANGE(0x8000, 0xffff) AM_ROM
 ADDRESS_MAP_END
 
-
 static ADDRESS_MAP_START( dd2_sound_map, ADDRESS_SPACE_PROGRAM, 8 )
 	AM_RANGE(0x0000, 0x7fff) AM_ROM
 	AM_RANGE(0x8000, 0x87ff) AM_RAM
 	AM_RANGE(0x8800, 0x8801) AM_DEVREADWRITE("fmsnd", ym2151_r, ym2151_w)
 	AM_RANGE(0x9800, 0x9800) AM_DEVREADWRITE("oki", okim6295_r, okim6295_w)
-	AM_RANGE(0xA000, 0xA000) AM_READ(soundlatch_r)
+	AM_RANGE(0xa000, 0xa000) AM_READ(soundlatch_ack_r)
 ADDRESS_MAP_END
-
 
 
 /*************************************
@@ -619,7 +619,6 @@ static ADDRESS_MAP_START( mcu_map, ADDRESS_SPACE_PROGRAM, 8 )
 	AM_RANGE(0x0008, 0x007f) AM_RAM
 	AM_RANGE(0x0080, 0x07ff) AM_ROM
 ADDRESS_MAP_END
-
 
 
 /*************************************
@@ -701,10 +700,8 @@ static INPUT_PORTS_START( ddragon )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_BUTTON3 )
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER(2)
 	PORT_BIT( 0x08, IP_ACTIVE_HIGH, IPT_VBLANK )
-	PORT_BIT( 0x10, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_CUSTOM(sub_cpu_busy, NULL)
-	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_UNKNOWN )
-	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNKNOWN )
-	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_UNKNOWN )
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_SPECIAL ) PORT_CUSTOM(subcpu_bus_free, NULL)
+	PORT_BIT( 0xe0, IP_ACTIVE_HIGH, IPT_UNUSED )
 INPUT_PORTS_END
 
 
@@ -814,7 +811,6 @@ static INPUT_PORTS_START( darktowr )
 INPUT_PORTS_END
 
 
-
 /*************************************
  *
  *  Graphics layouts
@@ -854,7 +850,6 @@ static GFXDECODE_START( ddragon )
 GFXDECODE_END
 
 
-
 /*************************************
  *
  *  Sound definitions
@@ -873,7 +868,6 @@ static const msm5205_interface msm5205_config =
 };
 
 
-
 /*************************************
  *
  *  Machine drivers
@@ -881,7 +875,6 @@ static const msm5205_interface msm5205_config =
  *************************************/
 
 static MACHINE_DRIVER_START( ddragon )
-
 	/* driver data */
 	MDRV_DRIVER_DATA(ddragon_state)
 
@@ -889,32 +882,25 @@ static MACHINE_DRIVER_START( ddragon )
 	MDRV_CPU_ADD("maincpu", HD6309, MAIN_CLOCK)		/* 12 MHz / 4 internally */
 	MDRV_CPU_PROGRAM_MAP(ddragon_map)
 	MDRV_TIMER_ADD_SCANLINE("scantimer", ddragon_scanline, "screen", 0, 1)
-
-	MDRV_CPU_ADD("sub", HD63701, MAIN_CLOCK / 2)	/* 6 MHz / 4 internally */
+	MDRV_CPU_ADD("sub", HD63701, MAIN_CLOCK / 2)		/* 6 MHz / 4 internally */
 	MDRV_CPU_PROGRAM_MAP(sub_map)
-
-	MDRV_CPU_ADD("soundcpu", M6809, MAIN_CLOCK / 8)	/* 1.5 MHz */
+	MDRV_CPU_ADD("soundcpu", M6809, MAIN_CLOCK / 8)		/* 1.5 MHz */
 	MDRV_CPU_PROGRAM_MAP(sound_map)
-
-	MDRV_QUANTUM_TIME(HZ(60000))	/* heavy interleaving to sync up sprite<->main cpu's */
-
+	MDRV_QUANTUM_TIME(HZ(60000))	/* heavy interleaving to sync up sprite<->main CPU's */
 	MDRV_MACHINE_START(ddragon)
 	MDRV_MACHINE_RESET(ddragon)
 
 	/* video hardware */
 	MDRV_GFXDECODE(ddragon)
 	MDRV_PALETTE_LENGTH(384)
-
 	MDRV_SCREEN_ADD("screen", RASTER)
 	MDRV_SCREEN_FORMAT(BITMAP_FORMAT_INDEXED16)
 	MDRV_SCREEN_RAW_PARAMS(PIXEL_CLOCK, 384, 0, 256, 272, 0, 240)
-
 	MDRV_VIDEO_START(ddragon)
 	MDRV_VIDEO_UPDATE(ddragon)
 
 	/* sound hardware */
 	MDRV_SPEAKER_STANDARD_MONO("mono")
-
 	MDRV_SOUND_ADD("fmsnd", YM2151, SOUND_CLOCK)
 	MDRV_SOUND_CONFIG(ym2151_config)
 	MDRV_SOUND_ROUTE(0, "mono", 0.60)
@@ -923,7 +909,6 @@ static MACHINE_DRIVER_START( ddragon )
 	MDRV_SOUND_ADD("adpcm1", MSM5205, MAIN_CLOCK/32)
 	MDRV_SOUND_CONFIG(msm5205_config)
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
-
 	MDRV_SOUND_ADD("adpcm2", MSM5205, MAIN_CLOCK/32)
 	MDRV_SOUND_CONFIG(msm5205_config)
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
@@ -934,7 +919,7 @@ static MACHINE_DRIVER_START( ddragonb )
 	MDRV_IMPORT_FROM(ddragon)
 
 	/* basic machine hardware */
-	MDRV_CPU_REPLACE("sub", M6809, MAIN_CLOCK / 8)	/* 1.5Mhz */
+	MDRV_CPU_REPLACE("sub", M6809, MAIN_CLOCK / 8)	/* 1.5MHz */
 	MDRV_CPU_PROGRAM_MAP(sub_map)
 MACHINE_DRIVER_END
 
@@ -943,14 +928,13 @@ static MACHINE_DRIVER_START( ddragonba )
 	MDRV_IMPORT_FROM(ddragon)
 
 	/* basic machine hardware */
-	MDRV_CPU_REPLACE("sub", M6803, MAIN_CLOCK / 2)	/* 6Mhz / 4 internally */
+	MDRV_CPU_REPLACE("sub", M6803, MAIN_CLOCK / 2)	/* 6MHz / 4 internally */
 	MDRV_CPU_PROGRAM_MAP(ddragonba_sub_map)
 	MDRV_CPU_IO_MAP(ddragonba_sub_portmap)
 MACHINE_DRIVER_END
 
 
 static MACHINE_DRIVER_START( ddragon2 )
-
 	/* driver data */
 	MDRV_DRIVER_DATA(ddragon_state)
 
@@ -958,26 +942,20 @@ static MACHINE_DRIVER_START( ddragon2 )
 	MDRV_CPU_ADD("maincpu", HD6309, MAIN_CLOCK)		/* 12 MHz / 4 internally */
 	MDRV_CPU_PROGRAM_MAP(dd2_map)
 	MDRV_TIMER_ADD_SCANLINE("scantimer", ddragon_scanline, "screen", 0, 1)
-
 	MDRV_CPU_ADD("sub", Z80, MAIN_CLOCK / 3)		/* 4 MHz */
 	MDRV_CPU_PROGRAM_MAP(dd2_sub_map)
-
 	MDRV_CPU_ADD("soundcpu", Z80, 3579545)
 	MDRV_CPU_PROGRAM_MAP(dd2_sound_map)
-
-	MDRV_QUANTUM_TIME(HZ(60000)) /* heavy interleaving to sync up sprite<->main cpu's */
-
+	MDRV_QUANTUM_TIME(HZ(60000))		/* heavy interleaving to sync up sprite<->main CPU's */
 	MDRV_MACHINE_START(ddragon)
 	MDRV_MACHINE_RESET(ddragon)
 
 	/* video hardware */
 	MDRV_GFXDECODE(ddragon)
 	MDRV_PALETTE_LENGTH(384)
-
 	MDRV_SCREEN_ADD("screen", RASTER)
 	MDRV_SCREEN_FORMAT(BITMAP_FORMAT_INDEXED16)
 	MDRV_SCREEN_RAW_PARAMS(PIXEL_CLOCK, 384, 0, 256, 272, 0, 240)
-
 	MDRV_VIDEO_START(ddragon)
 	MDRV_VIDEO_UPDATE(ddragon)
 
@@ -988,7 +966,6 @@ static MACHINE_DRIVER_START( ddragon2 )
 	MDRV_SOUND_CONFIG(ym2151_config)
 	MDRV_SOUND_ROUTE(0, "mono", 0.60)
 	MDRV_SOUND_ROUTE(1, "mono", 0.60)
-
 	MDRV_OKIM6295_ADD("oki", 1056000, OKIM6295_PIN7_HIGH) // clock frequency & pin 7 not verified
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.20)
 MACHINE_DRIVER_END
@@ -1049,7 +1026,7 @@ ROM_START( ddragon )
 
 	ROM_REGION( 0x0300, "proms", 0 )
 	ROM_LOAD( "21j-k-0",      0x0000, 0x0100, CRC(fdb130a9) SHA1(4c4f214229b9fab2b5d69c745ec5428787b89e1f) )	/* unknown */
-	ROM_LOAD( "21j-l-0",      0x0100, 0x0200, CRC(46339529) SHA1(64f4c42a826d67b7cbaa8a23a45ebc4eb6248891) )	/* unknown */
+	ROM_LOAD( "21j-l-0",      0x0100, 0x0200, CRC(46339529) SHA1(64f4c42a826d67b7cbaa8a23a45ebc4eb6248891) )	/* Layer priority */
 ROM_END
 
 ROM_START( ddragonw )
@@ -1216,7 +1193,6 @@ ROM_START( ddragonua )
 	ROM_LOAD( "21j-l-0",      0x0100, 0x0200, CRC(46339529) SHA1(64f4c42a826d67b7cbaa8a23a45ebc4eb6248891) )	/* unknown */
 ROM_END
 
-
 ROM_START( ddragonub )
 	ROM_REGION( 0x30000, "maincpu", 0 )	/* 64k for code + bankswitched memory */
 	ROM_LOAD( "21a-1_6.bin",0x08000,0x08000, CRC(f354b0e1) SHA1(f2fe5d6102564691a0054d2b8dd98673fdc8a348) )
@@ -1257,7 +1233,6 @@ ROM_START( ddragonub )
 	ROM_LOAD( "21j-k-0",      0x0000, 0x0100, CRC(fdb130a9) SHA1(4c4f214229b9fab2b5d69c745ec5428787b89e1f) )	/* unknown */
 	ROM_LOAD( "21j-l-0",      0x0100, 0x0200, CRC(46339529) SHA1(64f4c42a826d67b7cbaa8a23a45ebc4eb6248891) )	/* unknown */
 ROM_END
-
 
 ROM_START( ddragonb ) /* Same program roms as the World set */
 	ROM_REGION( 0x30000, "maincpu", 0 )	/* 64k for code + bankswitched memory */
@@ -1639,7 +1614,6 @@ static DRIVER_INIT( ddragon )
 	state->technos_video_hw = 0;
 }
 
-
 static DRIVER_INIT( ddragon2 )
 {
 	ddragon_state *state = machine->driver_data<ddragon_state>();
@@ -1649,7 +1623,6 @@ static DRIVER_INIT( ddragon2 )
 	state->ym_irq = 0;
 	state->technos_video_hw = 2;
 }
-
 
 static DRIVER_INIT( darktowr )
 {
