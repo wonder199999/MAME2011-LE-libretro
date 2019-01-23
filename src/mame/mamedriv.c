@@ -1089,4 +1089,22 @@ const game_driver *const drivers[] =
 	DRIVER( xsleenab )
 	DRIVER( xsleenaba )
 
+	DRIVER( ddragon )
+	DRIVER( ddragonw )
+	DRIVER( ddragonw1 )
+	DRIVER( ddragonu )
+	DRIVER( ddragonua )
+	DRIVER( ddragonub )
+	DRIVER( ddragonb )
+	DRIVER( ddragonba )
+	DRIVER( ddragonb2 )
+
+	DRIVER( ddragon2 )
+	DRIVER( ddragon2u )
+	DRIVER( ddragon2b )
+	DRIVER( ddragon2b2 )
+
+	DRIVER( ddungeon )
+	DRIVER( darktowr )
+
 #endif	/* DRIVER_RECURSIVE */

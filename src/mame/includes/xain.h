@@ -1,4 +1,6 @@
-// Solar Warrior / Xain'd Sleena
+/********************************************************/
+/*	     Solar Warrior / Xain'd Sleena		*/
+/********************************************************/
 
 #define MASTER_CLOCK		(XTAL_12MHz)
 #define CPU_CLOCK		(MASTER_CLOCK / 8)
@@ -11,7 +13,7 @@ public:
 	static driver_data_t *alloc(running_machine &machine) { return auto_alloc_clear(&machine, xain_state(machine)); }
 
 	xain_state(running_machine &machine)
-		: driver_data_t(machine) { }
+			: driver_data_t(machine) { }
 
 	/* pointers */
 	UINT8		*xain_charram;
@@ -28,23 +30,23 @@ public:
 	running_device	*mcu;
 
 	/* 68705 mcu */
-	INT32 from_main;
-	INT32 from_mcu;
-	INT32 _mcu_ready;
-	INT32 _mcu_accept;
-	UINT8 ddr_a;
-	UINT8 ddr_b;
-	UINT8 ddr_c;
-	UINT8 port_a_out;
-	UINT8 port_b_out;
-	UINT8 port_c_out;
-	UINT8 port_a_in;
-	UINT8 port_b_in;
-	UINT8 port_c_in;
+	INT32		from_main;
+	INT32		from_mcu;
+	INT32		_mcu_ready;
+	INT32		_mcu_accept;
+	UINT8		ddr_a;
+	UINT8		ddr_b;
+	UINT8		ddr_c;
+	UINT8		port_a_in;
+	UINT8		port_b_in;
+	UINT8		port_c_in;
+	UINT8		port_a_out;
+	UINT8		port_b_out;
+	UINT8		port_c_out;
 
 	/* video-related */
-	UINT8	xain_pri;
-	INT32	vblank;
+	UINT8		xain_pri;
+	INT32		vblank;
 };
 
 
@@ -52,6 +54,7 @@ public:
 
 VIDEO_UPDATE( xain );
 VIDEO_START( xain );
+
 WRITE8_HANDLER( xain_scrollxP0_w );
 WRITE8_HANDLER( xain_scrollyP0_w );
 WRITE8_HANDLER( xain_scrollxP1_w );

@@ -6,6 +6,8 @@
 !/*/
 !/.gitattributes
 !/.gitignore
+!makefile
+!/*.libretro
 !/*.md
 #########
 # Ignore
