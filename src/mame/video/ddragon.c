@@ -160,10 +160,9 @@ static void draw_sprites(running_machine *machine, bitmap_t *bitmap, const recta
 
 	const gfx_element *gfx = machine->gfx[1];
 	const UINT8 *src = (UINT8 *)state->spriteram;
-	const UINT32 len = state->spriteram_size;
 	INT32 attr, sx, sy, size, flipx, flipy, dx, dy, which, color;
 
-	for (int i = 0; i < len / 2; i += 5)
+	for (int i = 0; i < 64 * 5; i += 5)
 	{
 		attr = src[i + 1];
 		if (attr & 0x80)  /* visible */
@@ -182,6 +181,9 @@ static void draw_sprites(running_machine *machine, bitmap_t *bitmap, const recta
 			}
 			else
 			{
+				color = src[i + 2] >> 4;
+				which = src[i + 3] + ((src[i + 2] & 0x0f) << 8);
+
 				if (state->technos_video_hw == 1)	/* China Gate */
 				{
 					/* fix sprite clip */
@@ -192,8 +194,6 @@ static void draw_sprites(running_machine *machine, bitmap_t *bitmap, const recta
 					if ((sy < -7) && (sy > -16))
 						sy += 256;
 				}
-				color = src[i + 2] >> 4;
-				which = src[i + 3] + ((src[i + 2] & 0x0f) << 8);
 			}
 
 			if (flip_screen_get(machine))
