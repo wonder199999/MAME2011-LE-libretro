@@ -69,14 +69,17 @@ Dip locations verified with manual for ddragon & ddragon2
 ***************************************************************************/
 
 #include "emu.h"
+
 #include "cpu/hd6309/hd6309.h"
 #include "cpu/m6800/m6800.h"
 #include "cpu/m6805/m6805.h"
 #include "cpu/m6809/m6809.h"
 #include "cpu/z80/z80.h"
+
 #include "sound/2151intf.h"
 #include "sound/okim6295.h"
 #include "sound/msm5205.h"
+
 #include "includes/ddragon.h"
 
 
@@ -448,8 +451,8 @@ static WRITE8_HANDLER( dd_adpcm_w )
 {
 	ddragon_state *state = space->machine->driver_data<ddragon_state>();
 
-	running_device *adpcm = (offset & 1) ? state->adpcm_2 : state->adpcm_1;
-	int chip = (adpcm == state->adpcm_1) ? 0 : 1;
+	int chip = offset & 0x01;
+	running_device *adpcm = chip ? state->adpcm_2 : state->adpcm_1;
 
 	switch (offset / 2)
 	{
@@ -457,15 +460,12 @@ static WRITE8_HANDLER( dd_adpcm_w )
 			state->adpcm_idle[chip] = 1;
 			msm5205_reset_w(adpcm, 1);
 			break;
-
 		case 2:
 			state->adpcm_pos[chip] = (data & 0x7f) * 0x200;
 			break;
-
 		case 1:
 			state->adpcm_end[chip] = (data & 0x7f) * 0x200;
 			break;
-
 		case 0:
 			state->adpcm_idle[chip] = 0;
 			msm5205_reset_w(adpcm, 0);
@@ -474,11 +474,9 @@ static WRITE8_HANDLER( dd_adpcm_w )
 }
 
 
-static void dd_adpcm_int( running_device *device )
+static void dd_adpcm_int( running_device *device, int chip )
 {
 	ddragon_state *state = device->machine->driver_data<ddragon_state>();
-
-	int chip = (device == state->adpcm_1) ? 0 : 1;
 
 	if (state->adpcm_pos[chip] >= state->adpcm_end[chip] || state->adpcm_pos[chip] >= 0x10000)
 	{
@@ -499,6 +497,15 @@ static void dd_adpcm_int( running_device *device )
 	}
 }
 
+static void dd_adpcm_int_1(running_device *device)
+{
+	dd_adpcm_int(device->machine->device("adpcm1"), 0x00);
+}
+
+static void dd_adpcm_int_2(running_device *device)
+{
+	dd_adpcm_int(device->machine->device("adpcm2"), 0x01);
+}
 
 static READ8_HANDLER( dd_adpcm_status_r )
 {
@@ -714,15 +721,20 @@ static INPUT_PORTS_START( ddragon2 )
 	PORT_INCLUDE(ddragon)
 
 	PORT_MODIFY("DSW1")
+	PORT_DIPNAME( 0x03, 0x02, DEF_STR( Difficulty ) ) PORT_DIPLOCATION("SW2:1,2")
+	PORT_DIPSETTING(    0x01, DEF_STR( Easy ) )
+	PORT_DIPSETTING(    0x03, DEF_STR( Medium ) )
+	PORT_DIPSETTING(    0x02, DEF_STR( Hard ) )
+	PORT_DIPSETTING(    0x00, DEF_STR( Hardest ) )
 	PORT_DIPNAME( 0x08, 0x08, "Hurricane Kick" ) PORT_DIPLOCATION("SW2:4")
 	PORT_DIPSETTING(    0x00, DEF_STR( Easy ) )
 	PORT_DIPSETTING(    0x08, DEF_STR( Normal ) )
-	PORT_DIPNAME( 0x30, 0x30, "Timer" ) PORT_DIPLOCATION("SW2:5,6")
+	PORT_DIPNAME( 0x30, 0x10, "Timer" ) PORT_DIPLOCATION("SW2:5,6")
 	PORT_DIPSETTING(    0x00, "60" )
 	PORT_DIPSETTING(    0x10, "65" )
 	PORT_DIPSETTING(    0x30, "70" )
 	PORT_DIPSETTING(    0x20, "80" )
-	PORT_DIPNAME( 0xc0, 0xc0, DEF_STR( Lives ) ) PORT_DIPLOCATION("SW2:7,8")
+	PORT_DIPNAME( 0xc0, 0x80, DEF_STR( Lives ) ) PORT_DIPLOCATION("SW2:7,8")
 	PORT_DIPSETTING(    0xc0, "1" )
 	PORT_DIPSETTING(    0x80, "2" )
 	PORT_DIPSETTING(    0x40, "3" )
@@ -825,9 +837,8 @@ INPUT_PORTS_END
 
 static const gfx_layout char_layout =
 {
-	8,8,
-	RGN_FRAC(1,1),
-	4,
+	8, 8,
+	RGN_FRAC(1, 1),	4,
 	{ 0, 2, 4, 6 },
 	{ 1, 0, 8*8+1, 8*8+0, 16*8+1, 16*8+0, 24*8+1, 24*8+0 },
 	{ 0*8, 1*8, 2*8, 3*8, 4*8, 5*8, 6*8, 7*8 },
@@ -837,13 +848,10 @@ static const gfx_layout char_layout =
 static const gfx_layout tile_layout =
 {
 	16,16,
-	RGN_FRAC(1,2),
-	4,
+	RGN_FRAC(1,2),	4,
 	{ RGN_FRAC(1,2)+0, RGN_FRAC(1,2)+4, 0, 4 },
-	{ 3, 2, 1, 0, 16*8+3, 16*8+2, 16*8+1, 16*8+0,
-		  32*8+3, 32*8+2, 32*8+1, 32*8+0, 48*8+3, 48*8+2, 48*8+1, 48*8+0 },
-	{ 0*8, 1*8, 2*8, 3*8, 4*8, 5*8, 6*8, 7*8,
-		  8*8, 9*8, 10*8, 11*8, 12*8, 13*8, 14*8, 15*8 },
+	{ 3, 2, 1, 0, 16*8+3, 16*8+2, 16*8+1, 16*8+0, 32*8+3, 32*8+2, 32*8+1, 32*8+0, 48*8+3, 48*8+2, 48*8+1, 48*8+0 },
+	{ 0*8, 1*8, 2*8, 3*8, 4*8, 5*8, 6*8, 7*8, 8*8, 9*8, 10*8, 11*8, 12*8, 13*8, 14*8, 15*8 },
 	64*8
 };
 
@@ -861,16 +869,9 @@ GFXDECODE_END
  *
  *************************************/
 
-static const ym2151_interface ym2151_config =
-{
-	irq_handler
-};
-
-static const msm5205_interface msm5205_config =
-{
-	dd_adpcm_int,	/* interrupt function */
-	MSM5205_S48_4B	/* 8kHz */
-};
+static const ym2151_interface  ym2151_config = { irq_handler };
+static const msm5205_interface msm5205_config_1 = { dd_adpcm_int_1, MSM5205_S48_4B /* 8kHz */ };
+static const msm5205_interface msm5205_config_2 = { dd_adpcm_int_2, MSM5205_S48_4B /* 8kHz */ };
 
 
 /*************************************
@@ -912,10 +913,10 @@ static MACHINE_DRIVER_START( ddragon )
 	MDRV_SOUND_ROUTE(1, "mono", 0.60)
 
 	MDRV_SOUND_ADD("adpcm1", MSM5205, MAIN_CLOCK / 32)
-	MDRV_SOUND_CONFIG(msm5205_config)
+	MDRV_SOUND_CONFIG(msm5205_config_1)
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 	MDRV_SOUND_ADD("adpcm2", MSM5205, MAIN_CLOCK / 32)
-	MDRV_SOUND_CONFIG(msm5205_config)
+	MDRV_SOUND_CONFIG(msm5205_config_2)
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.50)
 MACHINE_DRIVER_END
 
