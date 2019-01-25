@@ -511,7 +511,7 @@ static READ8_HANDLER( dd_adpcm_status_r )
 {
 	ddragon_state *state = space->machine->driver_data<ddragon_state>();
 
-	return state->adpcm_idle[0] + (state->adpcm_idle[1] << 1);
+	return state->adpcm_idle[0] | (state->adpcm_idle[1] << 1);
 }
 
 
@@ -839,9 +839,9 @@ static const gfx_layout char_layout =
 {
 	8, 8,
 	RGN_FRAC(1, 1),	4,
-	{ 0, 2, 4, 6 },
+	{ STEP4(0, 2) },
 	{ 1, 0, 8*8+1, 8*8+0, 16*8+1, 16*8+0, 24*8+1, 24*8+0 },
-	{ 0*8, 1*8, 2*8, 3*8, 4*8, 5*8, 6*8, 7*8 },
+	{ STEP8(0, 8) },
 	32*8
 };
 
@@ -851,7 +851,7 @@ static const gfx_layout tile_layout =
 	RGN_FRAC(1,2),	4,
 	{ RGN_FRAC(1,2)+0, RGN_FRAC(1,2)+4, 0, 4 },
 	{ 3, 2, 1, 0, 16*8+3, 16*8+2, 16*8+1, 16*8+0, 32*8+3, 32*8+2, 32*8+1, 32*8+0, 48*8+3, 48*8+2, 48*8+1, 48*8+0 },
-	{ 0*8, 1*8, 2*8, 3*8, 4*8, 5*8, 6*8, 7*8, 8*8, 9*8, 10*8, 11*8, 12*8, 13*8, 14*8, 15*8 },
+	{ STEP16(0, 8) },
 	64*8
 };
 

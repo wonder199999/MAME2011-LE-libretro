@@ -44,7 +44,7 @@
 static TILEMAP_MAPPER( back_scan )
 {
 	/* logical (col,row) -> memory offset */
-	return (col & 0x0f) + ((row & 0x0f) << 4) + ((col & 0x10) << 4) + ((row & 0x10) << 5);
+	return (col & 0x0f) | ((row & 0x0f) << 4) | ((col & 0x10) << 4) | ((row & 0x10) << 5);
 }
 
 static TILE_GET_INFO( get_bgram0_tile_info )
@@ -187,12 +187,12 @@ static void draw_sprites(running_machine *machine, bitmap_t *bitmap, const recta
 {
 	UINT8 *spriteram = machine->generic.spriteram.u8;
 
-	for (int offs = 0; offs < machine->generic.spriteram_size; offs += 4)
+	INT32 sx, sy, flipx, flipy, attr, numtile, color;
+	for (UINT32 offs = 0; offs < machine->generic.spriteram_size; offs += 4)
 	{
-		int sx, sy, flipx, flipy;
-		int attr = spriteram[offs + 1];
-		int numtile = spriteram[offs + 2] | ((attr & 0x07) << 8);
-		int color = (attr & 0x38) >> 3;
+		attr = spriteram[offs + 1];
+		numtile = spriteram[offs + 2] | ((attr & 0x07) << 8);
+		color = (attr & 0x38) >> 3;
 
 		sx = 238 - spriteram[offs + 3];
 		if (sx <= -7)
