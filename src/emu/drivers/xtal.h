@@ -44,7 +44,9 @@ enum
     ------------------    ------------  ------------------------------------------------------------ */
 
 	XTAL_375KHz		= 375000,		/* MSM5205 for some bootleg CPS1 */
+	XTAL_455kHz		= 455000,		/* Used on Gladiator h/w */
 	XTAL_1MHz   		= 1000000,		/* Used to drive OKI M6295 chips */
+	XTAL_1_056MHz		= 1056000,		/* used on Trio The Punch */
 	XTAL_3_579545MHz	= 3579545,		/* NTSC color subcarrier, extremely common, used on 100's of PCBs */
 	XTAL_3_727625MHz	= 3727625,		/* Z80 for some bootleg CPS1 */
 	XTAL_4MHz   		= 4000000,		/* Z80 for some CPS1 board */
@@ -59,9 +61,10 @@ enum
 	XTAL_12MHz  		= 12000000,		/* Extremely common, used on 100's of PCBs */
 	XTAL_14_31818MHz	= 14318180,		/* Extremely common, used on 100's of PCBs */
 	XTAL_16MHz  		= 16000000,		/* Extremely common, used on 100's of PCBs */
+	XTAL_20MHz  		= 20000000,
 	XTAL_26_66666MHz	= 26666660,		/* Irem M92 but most use 27MHz */
-	XTAL_32MHz  		= 32000000,
-	XTAL_455kHz		= 455000		/* Used on Gladiator h/w */
+	XTAL_28MHz  		= 28000000,
+	XTAL_32MHz  		= 32000000 
 
 #if 0	/* useless */
 	XTAL_32_768kHz		= 32768,		/* 32.768kHz, used to drive RTC chips */
@@ -150,7 +153,6 @@ enum
 	XTAL_19_923MHz		= 19923000,		/* Cinematronics vectors */
 	XTAL_19_968MHz  	= 19968000,		/* Used mostly by some Taito games */
 
-	XTAL_20MHz  		= 20000000,
 	XTAL_20_16MHz		= 20160000,		/* Nintendo 8080 */
 	XTAL_20_079MHz		= 20790000,		/* Blockade-hardware Gremlin games */
 
@@ -177,7 +179,6 @@ enum
 	XTAL_27_164MHz  	= 27164000,		/* Typically used on 90's Taito PCBs to drive the custom chips */
 	XTAL_27_2109MHz		= 27210900,		/* LA Girl */
 
-	XTAL_28MHz  		= 28000000,
 	XTAL_28_37516MHz	= 28375160,		/* Amiga PAL systems */
 	XTAL_28_48MHz		= 28480000,		/* Chromatics CGC-7900 */
 	XTAL_28_63636MHz	= 28636360,		/* Later Leland games and Atari GT, Amiga NTSC , Raiden2 h/w */
@@ -240,7 +241,6 @@ enum
 
 	XTAL_640kHz		= 640000,
 
-	XTAL_1_056MHz		= 1056000		/* used on Trio The Punch */
 #endif
 };
 

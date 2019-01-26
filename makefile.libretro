@@ -121,6 +121,7 @@ $(MAMEOBJ)/neogeo.a: \
 
 $(MAMEOBJ)/technos.a: \
 	$(DRIVERS)/technos/ddragon.o $(VIDEO)/ddragon.o \
+	$(DRIVERS)/technos/ddragon3.o $(VIDEO)/ddragon3.o \
 	$(DRIVERS)/technos/xain.o $(VIDEO)/xain.o \
 
 $(DRIVERS)/neogeo.o:	$(MAMESRC)/drivers/neogeo/neogeo.inc

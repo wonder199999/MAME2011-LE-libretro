@@ -1107,4 +1107,16 @@ const game_driver *const drivers[] =
 	DRIVER( ddungeon )
 	DRIVER( darktowr )
 
+	DRIVER( ddragon3 )
+	DRIVER( ddragon3j )
+	DRIVER( ddragon3p )
+	DRIVER( ddragon3b )
+
+	DRIVER( ctribe )
+	DRIVER( ctribe1 )
+	DRIVER( ctribeo )
+	DRIVER( ctribej )
+	DRIVER( ctribeb )
+	DRIVER( ctribeb2 )
+
 #endif	/* DRIVER_RECURSIVE */
