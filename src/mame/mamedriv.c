@@ -1119,4 +1119,9 @@ const game_driver *const drivers[] =
 	DRIVER( ctribeb )
 	DRIVER( ctribeb2 )
 
+	DRIVER( chinagat )
+	DRIVER( saiyugou )
+	DRIVER( saiyugoub1 )
+	DRIVER(saiyugoub2 )
+
 #endif	/* DRIVER_RECURSIVE */
