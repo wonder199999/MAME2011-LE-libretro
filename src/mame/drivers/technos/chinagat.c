@@ -183,23 +183,19 @@ static WRITE8_HANDLER( chinagat_video_ctrl_w )
 
 static WRITE8_HANDLER( chinagat_bankswitch_w )
 {
-	memory_set_bank(space->machine, "bank1", data & 0x07);	// shall we check (data & 7) < 6 (# of banks)?
+	/* shall we check (data & 0x07) < 6 (# of banks)? */
+	memory_set_bank(space->machine, "bank1", data & 0x07);
 }
 
 static WRITE8_HANDLER( chinagat_sub_bankswitch_w )
 {
-	memory_set_bank(space->machine, "bank4", data & 0x07);	// shall we check (data & 7) < 6 (# of banks)?
+	/* shall we check (data & 0x07) < 6 (# of banks)? */
+	memory_set_bank(space->machine, "bank4", data & 0x07);
 }
 
 static READ8_HANDLER( saiyugoub1_mcu_command_r )
 {
 	ddragon_state *state = space->machine->driver_data<ddragon_state>();
-#if 0
-	if (state->mcu_command == 0x78)
-	{
-		space->machine->device<cpu_device>("mcu")->suspend(SUSPEND_REASON_HALT, 1);	/* Suspend (speed up) */
-	}
-#endif
 	return state->mcu_command;
 }
 
@@ -207,12 +203,6 @@ static WRITE8_HANDLER( saiyugoub1_mcu_command_w )
 {
 	ddragon_state *state = space->machine->driver_data<ddragon_state>();
 	state->mcu_command = data;
-#if 0
-	if (data != 0x78)
-	{
-		space->machine->device<cpu_device>("mcu")->resume(SUSPEND_REASON_HALT);	/* Wake up */
-	}
-#endif
 }
 
 static WRITE8_HANDLER( saiyugoub1_adpcm_rom_addr_w )
@@ -226,9 +216,6 @@ static WRITE8_DEVICE_HANDLER( saiyugoub1_adpcm_control_w )
 {
 	ddragon_state *state = device->machine->driver_data<ddragon_state>();
 
-	/* i8748 Port 2 write */
-	UINT8 *saiyugoub1_adpcm_rom = memory_region(device->machine, "adpcm");
-
 	if (data & 0x80)	/* Reset m5205 and disable ADPCM ROM outputs */
 	{
 		logerror("ADPCM output disabled\n");
@@ -237,23 +224,24 @@ static WRITE8_DEVICE_HANDLER( saiyugoub1_adpcm_control_w )
 	}
 	else
 	{
-		if ((state->i8748_P2 & 0xc) != (data & 0xc))
+		/* i8748 Port 2 write */
+		UINT8 *saiyugoub1_adpcm_rom = memory_region(device->machine, "adpcm");
+
+		if ((state->i8748_P2 & 0x0c) != (data & 0x0c))
 		{
-			if ((state->i8748_P2 & 0xc) == 0)	/* Latch MSB Address */
+			if ((state->i8748_P2 & 0x0c) == 0)	/* Latch MSB Address */
 			{
-				state->adpcm_addr = (state->adpcm_addr & 0x3807f) | (state->i8748_P1 << 7);
+				state->adpcm_addr = (state->adpcm_addr & 0x03807f) | (state->i8748_P1 << 7);
 			}
-			if ((state->i8748_P2 & 0xc) == 4)	/* Latch LSB Address */
+			else if ((state->i8748_P2 & 0x0c) == 4)	/* Latch LSB Address */
 			{
-				state->adpcm_addr = (state->adpcm_addr & 0x3ff80) | (state->i8748_P1 >> 1);
-				state->pcm_shift = (state->i8748_P1 & 1) * 4;
+				state->adpcm_addr = (state->adpcm_addr & 0x03ff80) | (state->i8748_P1 >> 1);
+				state->pcm_shift = (state->i8748_P1 & 0x01) * 4;
 			}
 		}
 
-		state->adpcm_addr = ((state->adpcm_addr & 0x07fff) | (data & 0x70 << 11));
-
-		state->pcm_nibble = saiyugoub1_adpcm_rom[state->adpcm_addr & 0x3ffff];
-
+		state->adpcm_addr = ((state->adpcm_addr & 0x007fff) | (data & 0x70 << 11));
+		state->pcm_nibble = saiyugoub1_adpcm_rom[state->adpcm_addr & 0x03ffff];
 		state->pcm_nibble = (state->pcm_nibble >> state->pcm_shift) & 0x0f;
 
 		if (((state->i8748_P2 & 0xc) >= 8) && ((data & 0xc) == 4))
@@ -261,8 +249,9 @@ static WRITE8_DEVICE_HANDLER( saiyugoub1_adpcm_control_w )
 			msm5205_data_w (device, state->pcm_nibble);
 			logerror("Writing %02x to m5205\n", state->pcm_nibble);
 		}
-		logerror("$ROM=%08x  P1=%02x  P2=%02x  Prev_P2=%02x  Nibble=%1x  PCM_data=%02x\n", state->adpcm_addr, state->i8748_P1, data, state->i8748_P2, state->pcm_shift, state->pcm_nibble);
+/*		logerror("$ROM=%08x  P1=%02x  P2=%02x  Prev_P2=%02x  Nibble=%1x  PCM_data=%02x\n", state->adpcm_addr, state->i8748_P1, data, state->i8748_P2, state->pcm_shift, state->pcm_nibble); */
 	}
+
 	state->i8748_P2 = data;
 }
 
@@ -295,6 +284,7 @@ static READ8_HANDLER( saiyugoub1_m5205_irq_r )
 		state->adpcm_sound_irq = 0;
 		return 1;
 	}
+
 	return 0;
 }
 
@@ -303,6 +293,10 @@ static void saiyugoub1_m5205_irq_w( running_device *device )
 	ddragon_state *state = device->machine->driver_data<ddragon_state>();
 	state->adpcm_sound_irq = 1;
 }
+
+/***************************
+	Memory map
+***************************/
 
 static ADDRESS_MAP_START( main_map, ADDRESS_SPACE_PROGRAM, 8 )
 	AM_RANGE(0x0000, 0x1fff) AM_RAM AM_SHARE("share1")
@@ -370,7 +364,9 @@ static ADDRESS_MAP_START( i8748_portmap, ADDRESS_SPACE_IO, 8 )
 	AM_RANGE(MCS48_PORT_P2, MCS48_PORT_P2) AM_DEVWRITE("adpcm", saiyugoub1_adpcm_control_w)
 ADDRESS_MAP_END
 
-
+/*******************************
+	INPUT PORTS, DIPS
+ *******************************/
 
 static INPUT_PORTS_START( chinagat )
 	PORT_START("SYSTEM")
@@ -447,22 +443,22 @@ static INPUT_PORTS_START( chinagat )
 INPUT_PORTS_END
 
 static const gfx_layout charlayout = {
-	8,8,					/* 8*8 chars */
-	RGN_FRAC(1,1),				/* num of characters */
+	8, 8,					/* 8*8 chars */
+	RGN_FRAC(1, 1),				/* num of characters */
 	4,					/* 4 bits per pixel */
 	{ 0, 2, 4, 6 },				/* plane offset */
 	{ 1, 0, 65, 64, 129, 128, 193, 192 },
-	{ STEP8(0,8) },				/* { 0*8, 1*8 ... 6*8, 7*8 }, */
+	{ STEP8(0, 8) },			/* { 0*8, 1*8 ... 6*8, 7*8 }, */
 	32*8					/* every char takes 32 consecutive bytes */
 };
 
 static const gfx_layout tilelayout = {
-	16,16,						/* 16x16 chars */
-	RGN_FRAC(1,2),					/* num of Tiles/Sprites */
+	16, 16,						/* 16x16 chars */
+	RGN_FRAC(1, 2),					/* num of Tiles/Sprites */
 	4,						/* 4 bits per pixel */
-	{ RGN_FRAC(1,2)+0, RGN_FRAC(1,2)+4, 0, 4 },	/* plane offset */
+	{ RGN_FRAC(1, 2)+0, RGN_FRAC(1, 2)+4, 0, 4 },	/* plane offset */
 	{ 3, 2, 1, 0, 16*8+3, 16*8+2, 16*8+1, 16*8+0, 32*8+3, 32*8+2, 32*8+1, 32*8+0, 48*8+3, 48*8+2, 48*8+1, 48*8+0 },
-	{ STEP16(0,8) },				/* { 0*8, 1*8 ... 14*8, 15*8 }, */
+	{ STEP16(0, 8) },				/* { 0*8, 1*8 ... 14*8, 15*8 }, */
 	64*8						/* every char takes 64 consecutive bytes */
 };
 
@@ -485,23 +481,19 @@ static const ym2151_interface ym2151_config =
 };
 
 /* This on the bootleg board, instead of the m6295 */
-static const msm5205_interface msm5205_config =
-{
+static const msm5205_interface msm5205_config = {
 	saiyugoub1_m5205_irq_w,		/* Interrupt function */
 	MSM5205_S64_4B			/* vclk input mode (6030Hz, 4-bit) */
 };
 
 /* This is only on the second bootleg board */
-static const ym2203_interface ym2203_config =
-{
+static const ym2203_interface ym2203_config = {
 	{
-		AY8910_LEGACY_OUTPUT,
-		AY8910_DEFAULT_LOADS,
+		AY8910_LEGACY_OUTPUT, AY8910_DEFAULT_LOADS,
 		DEVCB_NULL, DEVCB_NULL, DEVCB_NULL, DEVCB_NULL
 	},
 	chinagat_irq_handler
 };
-
 
 static MACHINE_START( chinagat )
 {
@@ -528,7 +520,6 @@ static MACHINE_START( chinagat )
 	state_save_register_global(machine, state->m5205_clk);
 #endif
 }
-
 
 static MACHINE_RESET( chinagat )
 {
@@ -884,5 +875,5 @@ static DRIVER_INIT( chinagat )
 /*   ( YEAR  NAME      PARENT     MACHINE      INPUT     INIT   MONITOR   COMPANY    			FULLNAME     		FLAGS ) */
 GAME( 1988, chinagat,   0,        chinagat,   chinagat, chinagat, ROT0, "Technos Japan (Taito / Romstar license)", "China Gate (US)", GAME_SUPPORTS_SAVE )
 GAME( 1988, saiyugou,   chinagat, chinagat,   chinagat, chinagat, ROT0, "Technos Japan", "Sai Yu Gou Ma Roku (Japan)", GAME_SUPPORTS_SAVE )
-GAME( 1988, saiyugoub1, chinagat, saiyugoub1, chinagat, chinagat, ROT0, "bootleg", "Sai Yu Gou Ma Roku (Japan bootleg 1)", GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )
+GAME( 1988, saiyugoub1, chinagat, saiyugoub1, chinagat, chinagat, ROT0, "bootleg", "Sai Yu Gou Ma Roku (Japan bootleg 1)", GAME_IMPERFECT_SOUND | GAME_SUPPORTS_SAVE )	/* Missing some sounds */
 GAME( 1988, saiyugoub2, chinagat, saiyugoub2, chinagat, chinagat, ROT0, "bootleg", "Sai Yu Gou Ma Roku (Japan bootleg 2)", GAME_SUPPORTS_SAVE )

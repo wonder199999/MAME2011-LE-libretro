@@ -8,7 +8,10 @@
 class ddragon_state : public driver_data_t
 {
 public:
-	static driver_data_t *alloc(running_machine &machine) { return auto_alloc_clear(&machine, ddragon_state(machine)); }
+	static driver_data_t *alloc(running_machine &machine)
+	{
+		return auto_alloc_clear(&machine, ddragon_state(machine));
+	}
 
 	ddragon_state(running_machine &machine)
 		: driver_data_t(machine) { }
@@ -49,7 +52,7 @@ public:
 	INT32		adpcm_data[2];
 	UINT8		adpcm_idle[2];
 
-	/* for Sai Yu Gou Ma Roku */
+	/* for Chinagat (Sai Yu Gou Ma Roku) */
 	INT32		adpcm_addr;
 	INT32		i8748_P1;
 	INT32		i8748_P2;

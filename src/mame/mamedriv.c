@@ -1122,6 +1122,6 @@ const game_driver *const drivers[] =
 	DRIVER( chinagat )
 	DRIVER( saiyugou )
 	DRIVER( saiyugoub1 )
-	DRIVER(saiyugoub2 )
+	DRIVER( saiyugoub2 )
 
 #endif	/* DRIVER_RECURSIVE */
