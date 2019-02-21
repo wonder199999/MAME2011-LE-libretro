@@ -63,6 +63,7 @@ enum
 	XTAL_16MHz  		= 16000000,		/* Extremely common, used on 100's of PCBs */
 	XTAL_20MHz  		= 20000000,
 	XTAL_26_66666MHz	= 26666660,		/* Irem M92 but most use 27MHz */
+	XTAL_24MHz  		= 24000000,		/* Mario, 80's Data East games, 80's Konami games */
 	XTAL_28MHz  		= 28000000,
 	XTAL_32MHz  		= 32000000 
 
@@ -164,7 +165,6 @@ enum
 	XTAL_22MHz  		= 22000000,
 	XTAL_22_1184MHz		= 22118400,
 
-	XTAL_24MHz  		= 24000000,		/* Mario, 80's Data East games, 80's Konami games */
 	XTAL_24_576MHz  	= 24576000,		/* Pole Position h/w, Model 3 CPU board */
 	XTAL_24_8832MHz 	= 24883200,		/* DEC VT100 */
 

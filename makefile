@@ -12,6 +12,8 @@
 NATIVE := 0
 ALIGNED = 0
 MDEBUG = 0
+BIGENDIAN = 0
+PTR64 = 0
 
 # ------------------------------------------------------------
 # Set the BIOS used by NEOGEO
@@ -20,36 +22,38 @@ MDEBUG = 0
 # ------------------------------------------------------------
 NEOGEO_BIOS = 0
 
+# System platform
 UNAME = $(shell uname -a)
+
 ifeq ($(platform),)
    platform = unix
+   system_platform = unix
    ifeq ($(UNAME),)
+	EXE_EXT = .exe
 	platform = win
+	system_platform = win
    else ifneq ($(findstring MINGW,$(UNAME)),)
 	platform = win
+	system_platform = win
    else ifneq ($(findstring Darwin,$(UNAME)),)
 	platform = osx
+	system_platform = osx
    else ifneq ($(findstring win,$(UNAME)),)
 	platform = win
+	system_platform = win
    endif
 endif
 
-# system platform
-system_platform = unix
-ifeq ($(UNAME),)
-   EXE_EXT = .exe
-   system_platform = win
-else ifneq ($(findstring Darwin,$(UNAME)),)
-   system_platform = osx
-else ifneq ($(findstring MINGW,$(UNAME)),)
-   system_platform = win
-endif
-
+# Autodetect PTR64 and ENDIAN
 UNAME = $(shell uname -m)
+
 ifeq ($(firstword $(filter x86_64,$(UNAME))),x86_64)
    PTR64 = 1
 endif
 ifeq ($(firstword $(filter amd64,$(UNAME))),amd64)
+   PTR64 = 1
+endif
+ifeq ($(firstword $(filter aarch64,$(UNAME))),aarch64)
    PTR64 = 1
 endif
 ifeq ($(firstword $(filter ppc64,$(UNAME))),ppc64)
@@ -97,15 +101,13 @@ EXE =
 LIBS = 
 CORE_DIR = .
 
-PLATCFLAGS += -D__LIBRETRO__
-CCOMFLAGS  += -D__LIBRETRO__
-
+# When doing 64bit build, is it optimize for local machine,
+# hence the result might not run on different machines.
 OPTFLAG ?= 0
 
+# Use software rendering by default
 VRENDER ?= soft
-
-ifeq ($(VRENDER),opengl)
-	PLATCFLAGS += -DHAVE_OPENGL
+ifeq ($(VRENDER), opengl)
 	CCOMFLAGS  += -DHAVE_OPENGL
 endif
 
@@ -128,7 +130,7 @@ endif
    CC = g++
    AR = @ar
    LD = g++
-   PLATCFLAGS += -fstrict-aliasing -fno-merge-constants -fsingle-precision-constant -fno-common -finline
+   PLATCFLAGS += -fno-merge-constants -fsingle-precision-constant -fno-common -finline
    CCOMFLAGS += $(PLATCFLAGS) -ffast-math
    LIBS += -lstdc++ -lpthread
    ALIGNED = 1
@@ -364,6 +366,8 @@ endif
 
 # Platform parameters finish
 
+CCOMFLAGS  += -D__LIBRETRO__
+
 GIT_VERSION ?= " $(shell git rev-parse --short HEAD || echo unknown)"
 ifneq ($(GIT_VERSION)," unknown")
 	CCOMFLAGS += -DGIT_VERSION=\"$(GIT_VERSION)\"
@@ -434,17 +438,15 @@ OBJ = obj/$(PREFIX)$(OSD)$(SUFFIX)$(SUFFIX64)$(SUFFIXDEBUG)$(SUFFIXPROFILE)
 DEFS += -DINLINE="static inline"
 
 # define MSB_FIRST if we are a big-endian target
-ifdef BIGENDIAN
-   DEFS       += -DMSB_FIRST
-   PLATCFLAGS += -DMSB_FIRST
+ifeq ($(BIGENDIAN), 1)
+   DEFS += -DMSB_FIRST
 endif
 
 # define PTR64 if we are a 64-bit target
 ifeq ($(PTR64), 1)
    DEFS += -DPTR64
-# Optimize for local machine (auto detect)
    ifeq ($(OPTFLAG), 1)
-	CCOMFLAGS += -march=native
+	CCOMFLAGS += -march=native -mtune=native -fomit-frame-pointer
    endif
 endif
 
@@ -499,8 +501,7 @@ CCOMFLAGS += \
 	-Wformat-security \
 	-Wwrite-strings \
 	-Wno-sign-compare \
-	-Wno-conversion \
-	-Wno-cast-align 
+	-Wno-conversion 
 
 # warnings only applicable to C compiles
 CONLYFLAGS += \

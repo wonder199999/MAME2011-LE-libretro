@@ -1124,4 +1124,10 @@ const game_driver *const drivers[] =
 	DRIVER( saiyugoub1 )
 	DRIVER( saiyugoub2 )
 
+	DRIVER( wwfwfest )
+	DRIVER( wwfwfesta )
+	DRIVER( wwfwfestb )
+	DRIVER( wwfwfestj )
+	DRIVER( wwfwfestk )
+
 #endif	/* DRIVER_RECURSIVE */

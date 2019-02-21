@@ -31,7 +31,6 @@ endif
 LIBS += -lz
 
 # then the various core pieces
-
 MAMESRC = $(SRC_DIR)/mame
 MAMEOBJ = $(OBJ)/mame
 
@@ -96,7 +95,6 @@ DRVLIBS = \
 	\
 	$(MAMEOBJ)/technos.a \
 
-
 #-------------------------------------------------
 # the following files are general components and
 # shared across a number of drivers
@@ -106,8 +104,7 @@ $(MAMEOBJ)/capcom.a: \
 	$(DRIVERS)/capcom/cps1.o $(VIDEO)/cps1.o \
 	$(DRIVERS)/capcom/cps2.o \
 	$(DRIVERS)/capcom/fcrash.o \
-	$(MACHINE)/cps2crpt.o \
-	$(MACHINE)/kabuki.o \
+	$(MACHINE)/cps2crpt.o $(MACHINE)/kabuki.o \
 
 $(MAMEOBJ)/irem.a: \
 	$(DRIVERS)/irem/m92.o $(VIDEO)/m92.o \
@@ -115,15 +112,14 @@ $(MAMEOBJ)/irem.a: \
 
 $(MAMEOBJ)/neogeo.a: \
 	$(DRIVERS)/neogeo/neogeo.o $(VIDEO)/neogeo.o \
-	$(MACHINE)/neoboot.o \
-	$(MACHINE)/neocrypt.o \
-	$(MACHINE)/neoprot.o \
+	$(MACHINE)/neoboot.o $(MACHINE)/neocrypt.o $(MACHINE)/neoprot.o \
 
 $(MAMEOBJ)/technos.a: \
 	$(DRIVERS)/technos/ddragon.o $(VIDEO)/ddragon.o \
 	$(DRIVERS)/technos/ddragon3.o $(VIDEO)/ddragon3.o \
 	$(DRIVERS)/technos/xain.o $(VIDEO)/xain.o \
 	$(DRIVERS)/technos/chinagat.o \
+	$(DRIVERS)/technos/wwfwfest.o $(VIDEO)/wwfwfest.o \
 
 $(DRIVERS)/neogeo.o:	$(MAMESRC)/drivers/neogeo/neogeo.inc
 
@@ -251,7 +247,6 @@ LIBEMUOBJS = $(EMUOBJS) $(EMUSOUNDOBJS) $(EMUAUDIOOBJS) $(EMUDRIVEROBJS) $(EMUMA
 
 $(LIBEMU): $(LIBEMUOBJS)
 
-
 #-------------------------------------------------
 # CPU core objects
 #-------------------------------------------------
@@ -259,14 +254,12 @@ $(LIBEMU): $(LIBEMUOBJS)
 CPUSRC = $(EMUSRC)/cpu
 CPUOBJ = $(EMUOBJ)/cpu
 
-
 #-------------------------------------------------
 # Shared code
 #-------------------------------------------------
 
 OBJDIRS += $(CPUOBJ)
 CPUOBJS += $(CPUOBJ)/vtlb.o
-
 
 #-------------------------------------------------
 # Intel MCS-48 (8039 and derivatives)
@@ -290,11 +283,6 @@ OBJDIRS += $(CPUOBJ)/m68000
 CPUOBJS += $(CPUOBJ)/m68000/m68kcpu.o $(CPUOBJ)/m68000/m68kops.o
 DASMOBJS += $(CPUOBJ)/m68000/m68kdasm.o
 endif
-
-# when we compile source files we need to include generated files from the OBJ directory
-$(CPUOBJ)/m68000/%.o: $(CPUSRC)/m68000/%.c | $(OSPREBUILD)
-	@echo Compiling $<...
-	$(CC) $(CDEFS) $(CFLAGS) -I$(CPUOBJ)/m68000 -c $< -o $@
 
 # when we compile generated files we need to include stuff from the src directory
 $(CPUOBJ)/m68000/%.o: $(CPUSRC)/m68000/%.c | $(OSPREBUILD)
@@ -406,6 +394,7 @@ endif
 $(CPUOBJ)/z80/z80.o:	$(CPUSRC)/z80/z80.c \
 				$(CPUSRC)/z80/z80.h
 
+# 
 $(LIBCPU): $(CPUOBJS)
 $(LIBDASM): $(DASMOBJS)
 
@@ -415,7 +404,6 @@ $(LIBDASM): $(DASMOBJS)
 
 SOUNDSRC = $(EMUSRC)/sound
 SOUNDOBJ = $(EMUOBJ)/sound
-
 
 #-------------------------------------------------
 # Core sound types; samples always required
@@ -435,7 +423,6 @@ ifneq ($(filter SPEAKER,$(SOUNDS)),)
 SOUNDOBJS += $(SOUNDOBJ)/speaker.o
 endif
 
-
 #-------------------------------------------------
 # Irem custom sound chips
 #-------------------------------------------------
@@ -443,7 +430,6 @@ endif
 ifneq ($(filter IREMGA20,$(SOUNDS)),)
 SOUNDOBJS += $(SOUNDOBJ)/iremga20.o
 endif
-
 
 #-------------------------------------------------
 # OKI ADPCM sample players
@@ -465,7 +451,6 @@ endif
 ifneq ($(filter QSOUND,$(SOUNDS)),)
 SOUNDOBJS += $(SOUNDOBJ)/qsound.o
 endif
-
 
 #-------------------------------------------------
 # Yamaha FM synthesizers
@@ -489,7 +474,6 @@ endif
 
 $(LIBSOUND): $(SOUNDOBJS)
 
-
 #-------------------------------------------------
 # additional dependencies
 #-------------------------------------------------
@@ -501,7 +485,6 @@ OBJDIRS += \
 	$(LIBOBJ)/util \
 	$(LIBOBJ)/expat \
 	$(LIBOBJ)/softfloat \
-
 
 #-------------------------------------------------
 # utility library objects
@@ -533,7 +516,6 @@ UTILOBJS = \
 	$(LIBOBJ)/util/xmlfile.o \
 	$(LIBOBJ)/util/zippath.o \
 
-
 $(OBJ)/libutil.a: $(UTILOBJS)
 
 #-------------------------------------------------
@@ -550,7 +532,6 @@ $(OBJ)/libexpat.a: $(EXPATOBJS)
 $(LIBOBJ)/expat/%.o: $(LIBSRC)/explat/%.c | $(OSPREBUILD)
 	@echo Compiling $<...
 	$(CC) $(CDEFS) $(CCOMFLAGS) $(CONLYFLAGS) -c $< -o $@
-
 
 #-------------------------------------------------
 # SoftFloat library objects
