@@ -13,15 +13,21 @@ WRITE16_HANDLER( ddragon3_scroll_w )
 
 	switch (offset)
 	{
-		case 0: COMBINE_DATA(&state->fg_scrollx);	break;	// Scroll X, BG1
-		case 1: COMBINE_DATA(&state->fg_scrolly);	break;	// Scroll Y, BG1
-		case 2: COMBINE_DATA(&state->bg_scrollx);	break;	// Scroll X, BG0
-		case 3: COMBINE_DATA(&state->bg_scrolly);	break;	// Scroll Y, BG0
-		case 4:										break;	// Unknown write
-		case 5: flip_screen_set(space->machine, data & 0x01);		break;	// Flip Screen
+		case 0: COMBINE_DATA(&state->fg_scrollx);	// Scroll X, BG1
+			break;
+		case 1: COMBINE_DATA(&state->fg_scrolly);	// Scroll Y, BG1
+			break;
+		case 2: COMBINE_DATA(&state->bg_scrollx);	// Scroll X, BG0
+			break;
+		case 3: COMBINE_DATA(&state->bg_scrolly);	// Scroll Y, BG0
+			break;
+		case 4:						// Unknown write
+			break;
+		case 5: flip_screen_set(space->machine, data & 0x01);	// Flip Screen
+			break;
 		case 6:
-			COMBINE_DATA(&state->bg_tilebase);			// BG Tile Base
-			state->bg_tilebase &= 0x1ff;
+			COMBINE_DATA(&state->bg_tilebase);		// BG Tile Base
+			state->bg_tilebase &= 0x01ff;
 			tilemap_mark_all_tiles_dirty(state->bg_tilemap);
 			break;
 	}
@@ -75,10 +81,10 @@ static TILE_GET_INFO( get_fg_tile_info )
 {
 	ddragon3_state *state = machine->driver_data<ddragon3_state>();
 
-	int offs = tile_index * 2;
+	int offs = tile_index << 1;
 	UINT16 attr = state->fg_videoram[offs];
 	int code = state->fg_videoram[offs + 1] & 0x1fff;
-	int color = attr & 0xf;
+	int color = attr & 0x0f;
 	int flags = (attr & 0x40) ? TILE_FLIPX : 0;
 
 	SET_TILE_INFO(0, code, color, flags);
@@ -113,7 +119,7 @@ VIDEO_START( ddragon3 )
  * -----+------------------+
  *   3  | --------xxxxxxxx | bank
  * -----+------------------+
- *   4  | ------------xxxx |color
+ *   4  | ------------xxxx | color
  * -----+------------------+
  *   5  | --------xxxxxxxx | xpos
  * -----+------------------+
@@ -125,29 +131,34 @@ static void draw_sprites( running_machine* machine, bitmap_t *bitmap, const rect
 	ddragon3_state *state = machine->driver_data<ddragon3_state>();
 
 	UINT16 *source = state->spriteram;
-	UINT16 *finish = source + 0x800;
+	UINT16 *finish = source + 0x0800;
+	UINT32 bank, code, color, height, i;
+	INT32 sx, sy, flipx, flipy;
+	UINT16 attr;
+	UINT8 flip_screen = (flip_screen_get(machine)) ? 1 : 0;
 
-	while (source < finish)
+	for ( ; source < finish; source += 8)
 	{
-		UINT16 attr = source[1];
-
+		attr = source[1];
 		if (attr & 0x01)	/* enable */
 		{
-			int i;
-			int bank = source[3] & 0xff;
-			int code = (source[2] & 0xff) + (bank * 256);
-			int color = source[4] & 0xf;
-			int flipx = attr & 0x10;
-			int flipy = attr & 0x08;
-			int sx = source[5] & 0xff;
-			int sy = source[0] & 0xff;
-			int height = (attr >> 5) & 0x07;
+			bank = (source[3] & 0xff) << 8;
+			code = (source[2] & 0xff) + bank;
+			color = source[4] & 0x0f;
+			flipx = attr & 0x10;
+			flipy = attr & 0x08;
+			height = (attr >> 5) & 0x07;
 
-			if (attr & 0x04) sx |= 0x100;
-			if (attr & 0x02) sy = 239 + (0x100 - sy); else sy = 240 - sy;
-			if (sx > 0x17f) sx = 0 - (0x200 - sx);
+			sx = source[5] & 0xff;
+			if (attr & 0x04)
+				sx |= 0x100;
+			if (sx > 383)
+				sx -= 512;
 
-			if (flip_screen_get(machine))
+			sy = source[0] & 0xff;
+			sy = (attr & 0x02) ? 239 + 256 - sy : 240 - sy;
+
+			if (flip_screen)
 			{
 				sx = 304 - sx;
 				sy = 224 - sy;
@@ -156,14 +167,9 @@ static void draw_sprites( running_machine* machine, bitmap_t *bitmap, const rect
 			}
 
 			for (i = 0; i <= height; i++)
-			{
-				drawgfx_transpen(bitmap, cliprect,
-					machine->gfx[1], code + i, color, flipx, flipy,
-					sx, sy + (flip_screen_get(machine) ? (i * 16) : (-i * 16)), 0);
-			}
+				drawgfx_transpen(bitmap, cliprect, machine->gfx[1],
+					code + i, color, flipx, flipy, sx, sy + (flip_screen ? i * 16 : -i * 16), 0);
 		}
-
-		source += 8;
 	}
 }
 
@@ -194,6 +200,7 @@ VIDEO_UPDATE( ddragon3 )
 		draw_sprites(screen->machine, bitmap, cliprect);
 		tilemap_draw(bitmap, cliprect, state->fg_tilemap, 0, 0);
 	}
+
 	return 0;
 }
 
@@ -206,7 +213,7 @@ VIDEO_UPDATE( ctribe )
 	tilemap_set_scrollx(state->fg_tilemap, 0, state->fg_scrollx);
 	tilemap_set_scrolly(state->fg_tilemap, 0, state->fg_scrolly);
 
-	if(state->vreg & 8)
+	if (state->vreg & 0x08)
 	{
 		tilemap_draw(bitmap, cliprect, state->fg_tilemap, TILEMAP_DRAW_OPAQUE, 0);
 		draw_sprites(screen->machine, bitmap, cliprect);
@@ -218,5 +225,6 @@ VIDEO_UPDATE( ctribe )
 		tilemap_draw(bitmap, cliprect, state->fg_tilemap, 0, 0);
 		draw_sprites(screen->machine, bitmap, cliprect);
 	}
+
 	return 0;
 }
