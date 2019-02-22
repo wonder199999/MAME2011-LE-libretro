@@ -28,12 +28,12 @@ public:
 	tilemap_t	*bg1_tilemap;
 	UINT16		bg0_dx;
 	UINT16		bg1_dx[2];
-	UINT16		wwfwfest_pri;
+	UINT16		sprite_xoff;
 	UINT16		wwfwfest_bg0_scrollx;
 	UINT16		wwfwfest_bg0_scrolly;
 	UINT16		wwfwfest_bg1_scrollx;
 	UINT16		wwfwfest_bg1_scrolly;
-	UINT16		sprite_xoff;
+	UINT8		wwfwfest_pri;
 };
 
 /*----------- defined in video/wwfwfest.c -----------*/

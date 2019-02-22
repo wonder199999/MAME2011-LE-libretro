@@ -84,7 +84,7 @@ static WRITE16_HANDLER( wwfwfest_paletteram16_xxxxBBBBGGGGRRRR_word_w )
 }
 
 /*- Priority Control -*/
-static WRITE16_HANDLER( wwfwfest_1410_write )
+static WRITE8_HANDLER( wwfwfest_priority_w )
 {
 	wwfwfest_state *state = space->machine->driver_data<wwfwfest_state>();
 	state->wwfwfest_pri = data;
@@ -133,7 +133,7 @@ static TIMER_DEVICE_CALLBACK( wwfwfest_scanline )
 	int scanline = param;
 
 	/* An interrupt is generated every 16 scanlines */
-	if (scanline % 0x0f == 0)
+	if ((scanline & 0x0f) == 0)
 	{
 		if (scanline > 0)
 			timer.machine->primary_screen->update_partial(scanline - 1);
@@ -189,7 +189,7 @@ static ADDRESS_MAP_START( main_map, ADDRESS_SPACE_PROGRAM, 16 )
 	AM_RANGE(0x10000a, 0x10000b) AM_WRITE(wwfwfest_flipscreen_w)
 	AM_RANGE(0x140000, 0x140003) AM_WRITE(wwfwfest_irq_ack_w)
 	AM_RANGE(0x14000c, 0x14000d) AM_WRITE(wwfwfest_soundwrite)
-	AM_RANGE(0x140010, 0x140011) AM_WRITE(wwfwfest_1410_write)
+	AM_RANGE(0x140010, 0x140011) AM_WRITE8(wwfwfest_priority_w, 0x00ff)
 	AM_RANGE(0x140020, 0x140021) AM_READ_PORT("P1")
 	AM_RANGE(0x140022, 0x140023) AM_READ_PORT("P2")
 	AM_RANGE(0x140024, 0x140025) AM_READ_PORT("P3")
@@ -392,12 +392,12 @@ static MACHINE_START( wwfwfest )
 
 	state_save_register_global(machine, state->bg0_dx);
 	state_save_register_global_array(machine, state->bg1_dx);
-	state_save_register_global(machine, state->wwfwfest_pri);
+	state_save_register_global(machine, state->sprite_xoff);
 	state_save_register_global(machine, state->wwfwfest_bg0_scrollx);
 	state_save_register_global(machine, state->wwfwfest_bg0_scrolly);
 	state_save_register_global(machine, state->wwfwfest_bg1_scrollx);
 	state_save_register_global(machine, state->wwfwfest_bg1_scrolly);
-	state_save_register_global(machine, state->sprite_xoff);
+	state_save_register_global(machine, state->wwfwfest_pri);
 }
 
 static MACHINE_RESET( wwfwfest )
@@ -407,12 +407,12 @@ static MACHINE_RESET( wwfwfest )
 	state->bg0_dx = 0;
 	state->bg1_dx[0] =
 	state->bg1_dx[1] = 0;
-	state->wwfwfest_pri = 0;
+	state->sprite_xoff = 0;
 	state->wwfwfest_bg0_scrollx = 0;
 	state->wwfwfest_bg0_scrolly = 0;
 	state->wwfwfest_bg1_scrollx = 0;
 	state->wwfwfest_bg1_scrolly = 0;
-	state->sprite_xoff = 0;
+	state->wwfwfest_pri = 0;
 }
 
 static MACHINE_DRIVER_START( wwfwfest )

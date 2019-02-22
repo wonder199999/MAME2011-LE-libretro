@@ -19,17 +19,8 @@ WRITE16_HANDLER( wwfwfest_fg0_videoram_w )
 {
 	wwfwfest_state *state = space->machine->driver_data<wwfwfest_state>();
 
-	/* Videoram is 8 bit, upper & lower byte writes end up in the same place */
-	if (ACCESSING_BITS_8_15)
-	{
-		if (ACCESSING_BITS_0_7)
-			COMBINE_DATA(&state->wwfwfest_fg0_videoram[offset]);
-		else
-			state->wwfwfest_fg0_videoram[offset] = (data >> 8) & 0xff;
-	}
-	else
-		state->wwfwfest_fg0_videoram[offset] = data & 0xff;
-
+	/* Videoram is 8 bit, upper & lower byte writes end up in the same place due to m68k byte smearing */
+	state->wwfwfest_fg0_videoram[offset] = data & 0xff;
 	tilemap_mark_tile_dirty(state->fg0_tilemap, offset / 2);
 }
 
@@ -256,7 +247,7 @@ VIDEO_UPDATE( wwfwfest )
 {
 	wwfwfest_state *state = screen->machine->driver_data<wwfwfest_state>();
 
-	if (state->wwfwfest_pri == 0x0078)
+	if (state->wwfwfest_pri == 0x78)
 	{
 		tilemap_set_scrolly(state->bg0_tilemap, 0, state->wwfwfest_bg0_scrolly);
 		tilemap_set_scrollx(state->bg0_tilemap, 0, state->wwfwfest_bg0_scrollx + state->bg0_dx);
@@ -272,21 +263,21 @@ VIDEO_UPDATE( wwfwfest )
 	}
 
 	/* todo : which bits of pri are significant to the order */
-	if (state->wwfwfest_pri == 0x0078)
+	if (state->wwfwfest_pri == 0x78)
 	{
 		tilemap_draw(bitmap, cliprect, state->bg1_tilemap, TILEMAP_DRAW_OPAQUE, 0);
 		tilemap_draw(bitmap, cliprect, state->bg0_tilemap, 0, 0);
 		draw_sprites(screen->machine, bitmap, cliprect);
 		tilemap_draw(bitmap, cliprect, state->fg0_tilemap, 0, 0);
 	}
-	else if (state->wwfwfest_pri == 0x007b)
+	else if (state->wwfwfest_pri == 0x7b)
 	{
 		tilemap_draw(bitmap, cliprect, state->bg0_tilemap, TILEMAP_DRAW_OPAQUE, 0);
 		tilemap_draw(bitmap, cliprect, state->bg1_tilemap, 0, 0);
 		draw_sprites(screen->machine, bitmap, cliprect);
 		tilemap_draw(bitmap, cliprect, state->fg0_tilemap, 0, 0);
 	}
-	else if (state->wwfwfest_pri == 0x007c)
+	else if (state->wwfwfest_pri == 0x7c)
 	{
 		tilemap_draw(bitmap, cliprect, state->bg0_tilemap, TILEMAP_DRAW_OPAQUE, 0);
 		draw_sprites(screen->machine, bitmap, cliprect);
