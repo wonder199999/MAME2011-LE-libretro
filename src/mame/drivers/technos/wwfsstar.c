@@ -162,26 +162,21 @@ static WRITE16_HANDLER ( wwfsstar_scrollwrite )
 {
 	wwfsstar_state *state = space->machine->driver_data<wwfsstar_state>();
 
-	switch (offset)
-	{
-		case 0x00:
-			state->scrollx = data;
-			break;
-		case 0x01:
-			state->scrolly = data;
-			break;
-	}
+	if (offset == 0)
+		state->scrollx = data;
+	else if (offset == 1)
+		state->scrolly = data;
 }
 
 static WRITE16_HANDLER ( wwfsstar_soundwrite )
 {
 	soundlatch_w(space, 1, data & 0xff);
-	cputag_set_input_line(space->machine, "audiocpu", INPUT_LINE_NMI, PULSE_LINE );
+	cputag_set_input_line(space->machine, "audiocpu", INPUT_LINE_NMI, PULSE_LINE);
 }
 
 static WRITE16_HANDLER( wwfsstar_flipscreen_w )
 {
-	flip_screen_set(space->machine, data & 1);
+	flip_screen_set(space->machine, data & 0x01);
 }
 
 static WRITE16_HANDLER( wwfsstar_irqack_w )
@@ -194,16 +189,16 @@ static WRITE16_HANDLER( wwfsstar_irqack_w )
 }
 
 /*
-    Interrupt behaviour verified from actual PCB.
+	Interrupt behaviour verified from actual PCB.
 
-    After the post third match intermission, there's a tight loop
-    which polls the vblank input bit until it is active.
-    The subsequent vblank ISR does not complete during the vblank
-    duration. On the real PCB, the 68000 would catch the active
-    vblank value before the interrupt was taken. The MAME
-    implementation does not and thus hangs.
+	After the post third match intermission, there's a tight loop
+	which polls the vblank input bit until it is active.
+	The subsequent vblank ISR does not complete during the vblank
+	duration. On the real PCB, the 68000 would catch the active
+	vblank value before the interrupt was taken. The MAME
+	implementation does not and thus hangs.
 
-    A hack is required: raise the vblank bit a scanline early.
+	A hack is required: raise the vblank bit a scanline early.
 */
 
 static TIMER_DEVICE_CALLBACK( wwfsstar_scanline )
@@ -311,7 +306,6 @@ static INPUT_PORTS_START( wwfsstar )
 	PORT_BIT( 0x0020, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER(1)
 	PORT_BIT( 0x0040, IP_ACTIVE_LOW, IPT_UNUSED )
 	PORT_BIT( 0x0080, IP_ACTIVE_LOW, IPT_START1 ) PORT_NAME("Button A (1P VS CPU - Power Up)")
-
 	PORT_START("P2")
 	PORT_BIT( 0x0001, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_PLAYER(2)
 	PORT_BIT( 0x0002, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_PLAYER(2)
@@ -333,7 +327,7 @@ static INPUT_PORTS_START( wwfsstar )
 	PORT_BIT( 0x0080, IP_ACTIVE_LOW, IPT_UNUSED )
 
 	PORT_START("DSW1")
-	PORT_DIPNAME( 0x07, 0x07, DEF_STR( Coin_A ) )
+	PORT_DIPNAME( 0x07, 0x07, DEF_STR( Coin_A ) )       PORT_DIPLOCATION("SW1:1,2,3")
 	PORT_DIPSETTING(    0x00,  DEF_STR( 4C_1C ) )
 	PORT_DIPSETTING(    0x01,  DEF_STR( 3C_1C ) )
 	PORT_DIPSETTING(    0x02,  DEF_STR( 2C_1C ) )
@@ -342,7 +336,7 @@ static INPUT_PORTS_START( wwfsstar )
 	PORT_DIPSETTING(    0x05,  DEF_STR( 1C_3C ) )
 	PORT_DIPSETTING(    0x04,  DEF_STR( 1C_4C ) )
 	PORT_DIPSETTING(    0x03,  DEF_STR( 1C_5C ) )
-	PORT_DIPNAME( 0x38, 0x38, DEF_STR( Coin_B ) )
+	PORT_DIPNAME( 0x38, 0x38, DEF_STR( Coin_B ) )       PORT_DIPLOCATION("SW1:4,5,6")
 	PORT_DIPSETTING(    0x00,  DEF_STR( 4C_1C ) )
 	PORT_DIPSETTING(    0x08,  DEF_STR( 3C_1C ) )
 	PORT_DIPSETTING(    0x10,  DEF_STR( 2C_1C ) )
@@ -351,34 +345,30 @@ static INPUT_PORTS_START( wwfsstar )
 	PORT_DIPSETTING(    0x28,  DEF_STR( 1C_3C ) )
 	PORT_DIPSETTING(    0x20,  DEF_STR( 1C_4C ) )
 	PORT_DIPSETTING(    0x18,  DEF_STR( 1C_5C ) )
-	PORT_DIPNAME( 0x40, 0x40, "Unused SW 0-6" )
-	PORT_DIPSETTING(    0x40, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_DIPNAME( 0x80, 0x80, DEF_STR( Flip_Screen ) )
+	PORT_DIPUNUSED_DIPLOC( 0x40, 0x40, "SW1:7" )        /* Manual shows Cabinet Type: Off=Upright & On=Table, has no effect */
+	PORT_DIPNAME( 0x80, 0x80, DEF_STR( Flip_Screen ) )  PORT_DIPLOCATION("SW1:8")
 	PORT_DIPSETTING(    0x80, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
 
 	PORT_START("DSW2")
-	PORT_DIPNAME( 0x03, 0x03, DEF_STR( Difficulty ) )
+	PORT_DIPNAME( 0x03, 0x03, DEF_STR( Difficulty ) )	PORT_DIPLOCATION("SW2:1,2")
 	PORT_DIPSETTING(    0x01, DEF_STR( Easy ) )
 	PORT_DIPSETTING(    0x03, DEF_STR( Normal ) )
 	PORT_DIPSETTING(    0x02, DEF_STR( Hard ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( Hardest ) )
-	PORT_DIPNAME( 0x04, 0x04, DEF_STR( Demo_Sounds ) )
+	PORT_DIPNAME( 0x04, 0x04, DEF_STR( Demo_Sounds ) )	PORT_DIPLOCATION("SW2:3")
 	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x04, DEF_STR( On ) )
-	PORT_DIPNAME( 0x08, 0x08, "Super Techniques" )			// Check code at 0x014272
+	PORT_DIPNAME( 0x08, 0x08, "Super Techniques" )	PORT_DIPLOCATION("SW2:4")   // Check code at 0x014272
 	PORT_DIPSETTING(    0x08, DEF_STR( Normal ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( Hard ) )
-	PORT_DIPNAME( 0x30, 0x30, "Time" )
+	PORT_DIPNAME( 0x30, 0x30, "Time" )		PORT_DIPLOCATION("SW2:5,6")
 	PORT_DIPSETTING(    0x20, "+2:30" )
 	PORT_DIPSETTING(    0x30, "Default" )
 	PORT_DIPSETTING(    0x10, "-2:30" )
 	PORT_DIPSETTING(    0x00, "-5:00" )
-	PORT_DIPNAME( 0x40, 0x40, "Unused SW 1-6" )
-	PORT_DIPSETTING(    0x40, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_DIPNAME( 0x80, 0x80, "Health For Winning" )
+	PORT_DIPUNUSED_DIPLOC( 0x40, 0x40, "SW2:7" )        /* Manual shows "3 Buttons" has no or unknown effect */
+	PORT_DIPNAME( 0x80, 0x80, "Health For Winning" )    PORT_DIPLOCATION("SW2:8")
 	PORT_DIPSETTING(    0x80, DEF_STR( No ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( Yes ) )
 INPUT_PORTS_END
