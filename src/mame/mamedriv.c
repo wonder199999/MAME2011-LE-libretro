@@ -1130,4 +1130,10 @@ const game_driver *const drivers[] =
 	DRIVER( wwfwfestj )
 	DRIVER( wwfwfestk )
 
+	DRIVER( wwfsstar )
+	DRIVER( wwfsstaru )
+	DRIVER( wwfsstarua )
+	DRIVER( wwfsstarj )
+	DRIVER( wwfsstarb )
+
 #endif	/* DRIVER_RECURSIVE */
