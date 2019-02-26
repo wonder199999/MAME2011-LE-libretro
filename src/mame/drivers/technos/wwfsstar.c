@@ -414,6 +414,27 @@ GFXDECODE_END
  Machine Driver(s)
 *******************************************************************************/
 
+static MACHINE_START( wwfsstar )
+{
+	wwfsstar_state *state = machine->driver_data<wwfsstar_state>();
+
+	state->maincpu = machine->device("maincpu");
+	state->audiocpu = machine->device("audiocpu");
+
+	state_save_register_global(machine, state->vblank);
+	state_save_register_global(machine, state->scrollx);
+	state_save_register_global(machine, state->scrolly);
+}
+
+static MACHINE_RESET( wwfsstar )
+{
+	wwfsstar_state *state = machine->driver_data<wwfsstar_state>();
+
+	state->vblank = 0;
+	state->scrollx = 0;
+	state->scrolly = 0;
+}
+
 static MACHINE_DRIVER_START( wwfsstar )
 	/* driver data */
 	MDRV_DRIVER_DATA(wwfsstar_state)
@@ -433,6 +454,8 @@ static MACHINE_DRIVER_START( wwfsstar )
 	MDRV_PALETTE_LENGTH(0x180)
 	MDRV_VIDEO_START(wwfsstar)
 	MDRV_VIDEO_UPDATE(wwfsstar)
+	MDRV_MACHINE_START(wwfsstar)
+	MDRV_MACHINE_RESET(wwfsstar)
 
 	/* sound hardware */
 	MDRV_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
@@ -632,8 +655,8 @@ ROM_START( wwfsstarb )
 ROM_END
 
 
-GAME( 1989, wwfsstar,   0,        wwfsstar, wwfsstar,  0, ROT0, "Technos Japan", "WWF Superstars (Europe)", 0 )
-GAME( 1989, wwfsstaru,  wwfsstar, wwfsstar, wwfsstar,  0, ROT0, "Technos Japan", "WWF Superstars (US, Newer)", 0 )
-GAME( 1989, wwfsstarua, wwfsstar, wwfsstar, wwfsstar,  0, ROT0, "Technos Japan", "WWF Superstars (US)", 0 )
-GAME( 1989, wwfsstarj,  wwfsstar, wwfsstar, wwfsstar,  0, ROT0, "Technos Japan", "WWF Superstars (Japan)", 0 )
-GAME( 1989, wwfsstarb,  wwfsstar, wwfsstar, wwfsstar,  0, ROT0, "bootleg",       "WWF Superstars (bootleg)", 0 )
+GAME( 1989, wwfsstar,   0,        wwfsstar, wwfsstar,  0, ROT0, "Technos Japan", "WWF Superstars (Europe)", GAME_SUPPORTS_SAVE )
+GAME( 1989, wwfsstaru,  wwfsstar, wwfsstar, wwfsstar,  0, ROT0, "Technos Japan", "WWF Superstars (US, Newer)", GAME_SUPPORTS_SAVE )
+GAME( 1989, wwfsstarua, wwfsstar, wwfsstar, wwfsstar,  0, ROT0, "Technos Japan", "WWF Superstars (US)", GAME_SUPPORTS_SAVE )
+GAME( 1989, wwfsstarj,  wwfsstar, wwfsstar, wwfsstar,  0, ROT0, "Technos Japan", "WWF Superstars (Japan)", GAME_SUPPORTS_SAVE )
+GAME( 1989, wwfsstarb,  wwfsstar, wwfsstar, wwfsstar,  0, ROT0, "bootleg",       "WWF Superstars (bootleg)", GAME_SUPPORTS_SAVE )
