@@ -139,10 +139,12 @@ Updates by Bryan McPhail, 12/12/2004:
 
 #include "emu.h"
 #include "deprecat.h"
+
 #include "cpu/m6809/m6809.h"
 #include "cpu/m6805/m6805.h"
-#include "includes/xain.h"
 #include "sound/2203intf.h"
+
+#include "includes/xain.h"
 
 
 #if defined(ARM_ENABLED)
@@ -204,11 +206,11 @@ static TIMER_DEVICE_CALLBACK( xain_scanline )
 
 	/* FIRQ (IMS) fires every on every 8th scanline (except 0) */
 	if (!(vcount_old & 0x08) && (vcount & 0x08))
-		cputag_set_input_line(timer.machine, "maincpu", M6809_FIRQ_LINE, ASSERT_LINE);
+		cpu_set_input_line(state->maincpu, M6809_FIRQ_LINE, ASSERT_LINE);
 
 	/* NMI fires on scanline 248 (VBL) and is latched */
 	if (vcount == 0xf8)
-		cputag_set_input_line(timer.machine, "maincpu", INPUT_LINE_NMI, ASSERT_LINE);
+		cpu_set_input_line(state->maincpu, INPUT_LINE_NMI, ASSERT_LINE);
 
 	/* VBLANK input bit is held high from scanlines 248-255 */
 	state->vblank = (vcount >= 248 - 1) ? 1 : 0;	// -1 is a hack - see notes above
@@ -285,8 +287,8 @@ static WRITE8_HANDLER( xain_68705_w )
 	state->from_main = data;
 	state->_mcu_accept = 0;
 
-	if (space->machine->device("mcu") != NULL)
-		cputag_set_input_line(space->machine, "mcu", 0, ASSERT_LINE);
+	if (state->mcu != NULL)
+		cpu_set_input_line(state->mcu, 0, ASSERT_LINE);
 }
 
 /***************************************************************************
@@ -332,7 +334,7 @@ WRITE8_HANDLER( xain_68705_port_b_w )
 		else if ((~state->port_b_out & 0x02) && (data & 0x02))
 		{
 			state->_mcu_accept = 1;
-			cputag_set_input_line(space->machine, "mcu", 0, CLEAR_LINE);
+			cpu_set_input_line(state->mcu, 0, CLEAR_LINE);
 		}
 	}
 	if (state->ddr_b & 0x04)
@@ -387,7 +389,7 @@ static CUSTOM_INPUT( mcu_status_r )
 
 	UINT8 res = 0;
 
-	if (field->port->machine->device("mcu") != NULL)
+	if (state->mcu != NULL)
 	{
 		if (state->_mcu_ready == 1)
 			res |= 0x01;
@@ -407,8 +409,8 @@ READ8_HANDLER( mcu_comm_reset_r )
 	state->_mcu_ready = 1;
 	state->_mcu_accept = 1;
 
-	if (space->machine->device("mcu") != NULL)
-		cputag_set_input_line(space->machine, "mcu", 0, CLEAR_LINE);
+	if (state->mcu != NULL)
+		cpu_set_input_line(state->mcu, 0, CLEAR_LINE);
 
 	return 0xff;
 }
@@ -553,7 +555,7 @@ static const gfx_layout charlayout =
 	8,8,
 	RGN_FRAC(1,1),
 	4,
-	{ 0, 2, 4, 6 },
+	{ STEP4(0,2) },
 	{ STEP2(0*8+1,-1), STEP2(8*8+1,-1), STEP2(16*8+1,-1), STEP2(24*8+1,-1) },
 	{ STEP8(0,8) },
 	32*8
@@ -586,20 +588,45 @@ static void irqhandler(running_device *device, int irq)
 
 static const ym2203_interface ym2203_config =
 {
-	{
-		AY8910_LEGACY_OUTPUT,
+	{	AY8910_LEGACY_OUTPUT,
 		AY8910_DEFAULT_LOADS,
-		DEVCB_NULL, DEVCB_NULL, DEVCB_NULL, DEVCB_NULL
-	},
-	irqhandler
+		DEVCB_NULL, DEVCB_NULL,
+		DEVCB_NULL, DEVCB_NULL	}, irqhandler
 };
 
 static MACHINE_START( xsleena )
 {
+	xain_state *state = machine->driver_data<xain_state>();
+
 	memory_configure_bank(machine, "bank1", 0, 2, memory_region(machine, "maincpu") + 0x4000, 0xc000);
 	memory_configure_bank(machine, "bank2", 0, 2, memory_region(machine, "sub")  + 0x4000, 0xc000);
 	memory_set_bank(machine, "bank1", 0);
 	memory_set_bank(machine, "bank2", 0);
+
+	state->maincpu = machine->device("maincpu");
+	state->audiocpu = machine->device("audiocpu");
+	state->subcpu = machine->device("sub");
+	state->mcu = machine->device("mcu");
+
+	state_save_register_global(machine, state->xain_pri);
+	state_save_register_global(machine, state->vblank);
+
+	if (state->mcu != NULL)		/* xsleenab and xsleenaba has no mcu */
+	{
+		state_save_register_global(machine, state->from_main);
+		state_save_register_global(machine, state->from_mcu);
+		state_save_register_global(machine, state->_mcu_ready);
+		state_save_register_global(machine, state->_mcu_accept);
+		state_save_register_global(machine, state->ddr_a);
+		state_save_register_global(machine, state->ddr_b);
+		state_save_register_global(machine, state->ddr_c);
+		state_save_register_global(machine, state->port_a_in);
+		state_save_register_global(machine, state->port_b_in);
+		state_save_register_global(machine, state->port_c_in);
+		state_save_register_global(machine, state->port_a_out);
+		state_save_register_global(machine, state->port_b_out);
+		state_save_register_global(machine, state->port_c_out);
+	}
 }
 
 static MACHINE_DRIVER_START( xsleena )
@@ -615,13 +642,10 @@ static MACHINE_DRIVER_START( xsleena )
 #endif
 	MDRV_CPU_ADD("sub", M6809, CPU_CLOCK)
 	MDRV_CPU_PROGRAM_MAP(cpu_map_B)
-
 	MDRV_CPU_ADD("audiocpu", M6809, CPU_CLOCK)
 	MDRV_CPU_PROGRAM_MAP(sound_map)
-
 	MDRV_CPU_ADD("mcu", M68705, MCU_CLOCK)
 	MDRV_CPU_PROGRAM_MAP(mcu_map)
-
 	MDRV_MACHINE_START(xsleena)
 	MDRV_QUANTUM_PERFECT_CPU("maincpu")
 
@@ -643,21 +667,18 @@ static MACHINE_DRIVER_START( xsleena )
 
 	/* sound hardware */
 	MDRV_SPEAKER_STANDARD_MONO("mono")
-
 	MDRV_SOUND_ADD("ym1", YM2203, MCU_CLOCK)
 	MDRV_SOUND_CONFIG(ym2203_config)
 	MDRV_SOUND_ROUTE(0, "mono", 0.50)
 	MDRV_SOUND_ROUTE(1, "mono", 0.50)
 	MDRV_SOUND_ROUTE(2, "mono", 0.50)
 	MDRV_SOUND_ROUTE(3, "mono", 0.40)
-
 	MDRV_SOUND_ADD("ym2", YM2203, MCU_CLOCK)
 	MDRV_SOUND_ROUTE(0, "mono", 0.50)
 	MDRV_SOUND_ROUTE(1, "mono", 0.50)
 	MDRV_SOUND_ROUTE(2, "mono", 0.50)
 	MDRV_SOUND_ROUTE(3, "mono", 0.40)
 MACHINE_DRIVER_END
-
 
 static MACHINE_DRIVER_START( xsleenab )
 	MDRV_IMPORT_FROM(xsleena)
@@ -943,8 +964,8 @@ ROM_START( xsleenaba )
 ROM_END
 
 
-GAME( 1986, xsleena,	0,	  xsleena,   xsleena,	0,   ROT0,  "Technos Japan (Taito license)", "Xain'd Sleena (World)", 0 )
-GAME( 1986, xsleenaj,	xsleena,  xsleena,   xsleena,	0,   ROT0,  "Technos Japan", "Xain'd Sleena (Japan)", 0 )
-GAME( 1986, solrwarr,	xsleena,  xsleena,   xsleena,	0,   ROT0,  "Technos Japan (Taito license)", "Solar-Warrior (US)", 0 )
-GAME( 1986, xsleenab,	xsleena,  xsleenab,  xsleena,	0,   ROT0,  "bootleg", "Xain'd Sleena (bootleg)", 0 )
-GAME( 1987, xsleenaba,	xsleena,  xsleenab,  xsleena,	0,   ROT0,  "bootleg", "Xain'd Sleena (bootleg, bugfixed)", 0 ) // newer bootleg, fixes some of the issues with the other one
+GAME( 1986, xsleena,	0,	  xsleena,   xsleena,	0,   ROT0,  "Technos Japan (Taito license)", "Xain'd Sleena (World)", GAME_SUPPORTS_SAVE )
+GAME( 1986, xsleenaj,	xsleena,  xsleena,   xsleena,	0,   ROT0,  "Technos Japan", "Xain'd Sleena (Japan)", GAME_SUPPORTS_SAVE )
+GAME( 1986, solrwarr,	xsleena,  xsleena,   xsleena,	0,   ROT0,  "Technos Japan (Taito license)", "Solar-Warrior (US)", GAME_SUPPORTS_SAVE )
+GAME( 1986, xsleenab,	xsleena,  xsleenab,  xsleena,	0,   ROT0,  "bootleg", "Xain'd Sleena (bootleg)", GAME_SUPPORTS_SAVE )
+GAME( 1987, xsleenaba,	xsleena,  xsleenab,  xsleena,	0,   ROT0,  "bootleg", "Xain'd Sleena (bootleg, bugfixed)", GAME_SUPPORTS_SAVE ) // newer bootleg, fixes some of the issues with the other one
