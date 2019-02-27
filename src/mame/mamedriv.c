@@ -1136,4 +1136,8 @@ const game_driver *const drivers[] =
 	DRIVER( wwfsstarj )
 	DRIVER( wwfsstarb )
 
+	DRIVER( shadfrce )
+	DRIVER( shadfrceu )
+	DRIVER( shadfrcej )
+
 #endif	/* DRIVER_RECURSIVE */

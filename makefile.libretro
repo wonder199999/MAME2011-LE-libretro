@@ -121,6 +121,7 @@ $(MAMEOBJ)/technos.a: \
 	$(DRIVERS)/technos/chinagat.o \
 	$(DRIVERS)/technos/wwfwfest.o $(VIDEO)/wwfwfest.o \
 	$(DRIVERS)/technos/wwfsstar.o $(VIDEO)/wwfsstar.o \
+	$(DRIVERS)/technos/shadfrce.o $(VIDEO)/shadfrce.o \
 
 $(DRIVERS)/neogeo.o:	$(MAMESRC)/drivers/neogeo/neogeo.inc
 

@@ -59,6 +59,7 @@ enum
 	XTAL_10MHz  		= 10000000,
 	XTAL_11MHz		= 11000000,		/* Mario I8039 sound */
 	XTAL_12MHz  		= 12000000,		/* Extremely common, used on 100's of PCBs */
+	XTAL_13_4952MHz		= 13495200,		/* Used on Shadow Force pcb and maybe other Technos pcbs? */
 	XTAL_14_31818MHz	= 14318180,		/* Extremely common, used on 100's of PCBs */
 	XTAL_16MHz  		= 16000000,		/* Extremely common, used on 100's of PCBs */
 	XTAL_20MHz  		= 20000000,
@@ -129,7 +130,6 @@ enum
 	XTAL_13_3MHz		= 13300000,		/* BMC bowling */
 	XTAL_13_33056MHz	= 13330560,		/* Taito L */
 	XTAL_13_4MHz		= 13400000,		/* TNK3, Ikari Warriors h/w */
-	XTAL_13_4952MHz		= 13495200,		/* Used on Shadow Force pcb and maybe other Technos pcbs? */
 
 	XTAL_14MHz  		= 14000000,
 	XTAL_14_112MHz  	= 14112000,		/* Timex/Sinclair TS2068 */

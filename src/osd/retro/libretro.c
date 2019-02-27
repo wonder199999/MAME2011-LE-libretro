@@ -894,22 +894,6 @@ static int iptdev_get_state(void *device_internal, void *item_internal)
 	return *itemdata;
 }
 
-static const char *specific_games_initinput_vs6b[] = {
-	"sf2",		"sf2ce",
-	"sf2hf",	"sfzch",
-	"ssf2",		"ssf2t",
-	"sfa",		"sfa2",
-	"sfa3",		"sfz2al",
-	"hsf2",		"dstlk",
-	"vsav",		"vsav2",
-	"vhunt2",	"msh",
-	"mshvsf",	"mvsc",
-	"xmcota",	"xmvsf",
-	"ringdest",	"nwarr",
-	"ssoldier",
-	NULL
-};
-
 static void initInput( running_machine *machine )
 {
 	UINT32 i;
@@ -991,6 +975,24 @@ static void initInput( running_machine *machine )
 	input_device_item_add(P4_device, "P4 JoyL",  &pad_state[3][KEY_JOYSTICK_L], ITEM_ID_4_PAD, iptdev_get_state);
 	input_device_item_add(P4_device, "P4 JoyR",  &pad_state[3][KEY_JOYSTICK_R], ITEM_ID_6_PAD, iptdev_get_state);
 
+	const char *specific_games_initinput_need6b[] = {
+		/* CPS1 */
+		"sf2",		"sf2ce",	"sf2hf",
+		/* CPS2 */
+		"sfzch",	"ssf2",		"ssf2t",
+		"sfa",		"sfa2",		"sfa3",
+		"sfz2al",	"hsf2",		"dstlk",
+		"vsav",		"vsav2",	"vhunt2",
+		"msh",		"mshvsf",	"mvsc",
+		"xmcota",	"xmvsf",	"ringdest",
+		"nwarr",
+		/* IREM - Superior Soldiers */
+		"ssoldier",
+		/* Technos - Shadow Force */
+		"shadfrce",
+		NULL
+	};
+
 	/* Neo Geo buttons layout */
 	if (!core_stricmp(machine->gamedrv->source_file, "src/mame/drivers/neogeo/neogeo.inc"))
 	{
@@ -1034,10 +1036,10 @@ static void initInput( running_machine *machine )
 		macro_enable = false;
 		goto FINISHED;
 	}
-	/* 6-buttons fighting games input layout */
-	for (i = 0; specific_games_initinput_vs6b[i] != NULL; i++)
+	/* Need 6 buttons games input layout */
+	for (i = 0; specific_games_initinput_need6b[i] != NULL; i++)
 	{
-		if ( !core_stricmp(machine->gamedrv->name, specific_games_initinput_vs6b[i]) || !core_stricmp(machine->gamedrv->parent, specific_games_initinput_vs6b[i]) )
+		if ( !core_stricmp(machine->gamedrv->name, specific_games_initinput_need6b[i]) || !core_stricmp(machine->gamedrv->parent, specific_games_initinput_need6b[i]) )
 		{
 			input_device_item_add(P1_device, "P1 B1", &pad_state[0][KEY_BUTTON_1], ITEM_ID_Z,	 iptdev_get_state);
 			input_device_item_add(P1_device, "P1 B2", &pad_state[0][KEY_BUTTON_2], ITEM_ID_LSHIFT, 	 iptdev_get_state);
@@ -1057,7 +1059,7 @@ static void initInput( running_machine *machine )
 			goto FINISHED;
 		}
 	}
-	/* Default layout */
+	/* Default layout - 4 buttons */
 	{
 		input_device_item_add(P1_device, "P1 B1", &pad_state[0][KEY_BUTTON_1], ITEM_ID_LCONTROL, iptdev_get_state);
 		input_device_item_add(P1_device, "P1 B2", &pad_state[0][KEY_BUTTON_2], ITEM_ID_LALT, 	 iptdev_get_state);
@@ -1372,19 +1374,6 @@ void osd_customize_input_type_list(input_type_desc *typelist)
 //	main
 //============================================================
 
-static const char *xargv[] = {
-	"-joystick",
-	"-sound",
-	"-rompath",
-	NULL, NULL,
-	NULL, NULL,
-	NULL, NULL,
-	NULL, NULL,
-	NULL, NULL,
-	NULL, NULL,
-	NULL, NULL
-};
-
 static int parsePath(char *path, char *gamePath, char *gameName)
 {
 	int i;
@@ -1457,9 +1446,17 @@ static int executeGame(char *path)
 	int paramCount;
 	int driverIndex;
 
+	const char *xargv[] = {
+		"-joystick", "-sound", "-rompath",
+		NULL, NULL, NULL, NULL,
+		NULL, NULL, NULL, NULL,
+		NULL, NULL, NULL, NULL,
+		NULL, NULL
+	};
+
 	FirstTimeUpdate = 1;
 
-	//split the path to directory and the name without the zip extension
+	// Split the path to directory and the name without the zip extension
 	result = parsePath(path, MAME_GAME_PATH, MAME_GAME_NAME);
 
 	if (result == 0)
@@ -1468,7 +1465,7 @@ static int executeGame(char *path)
 		strcpy(MAME_GAME_NAME, path);
 	}
 
-	//Find the game info. Exit if game driver was not found.
+	// Find the game info. Exit if game driver was not found.
 	if (getGameInfo(MAME_GAME_NAME, &gameRot, &driverIndex) == 0)
 	{
 		LOGI("game not found: %s\n", MAME_GAME_NAME);
@@ -1480,14 +1477,14 @@ static int executeGame(char *path)
 		screenRot = 1;
 		if (gameRot & ORIENTATION_FLIP_X)
 		{
-			LOGI("*********** flip X \n");
+			LOGI("*********** flip X\n");
 			screenRot = 2;
 		}
 	}
 
 /*	LOGI("creating frontend...\n");	*/
 
-	//find how many parameters we have
+	// Find how many parameters we have
 	for (paramCount = 0; xargv[paramCount] != NULL; paramCount++) ;
 
 	xargv[paramCount++] = (char*)retro_content_dir;
