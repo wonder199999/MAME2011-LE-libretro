@@ -1,3 +1,6 @@
+/**************************/
+/*	SHADOW FORCE	  */
+/**************************/
 
 class shadfrce_state : public driver_data_t
 {
@@ -10,32 +13,41 @@ public:
 	shadfrce_state(running_machine &machine)
 		: driver_data_t(machine) { }
 
-	tilemap_t *fgtilemap;
-	tilemap_t *bg0tilemap;
-	tilemap_t *bg1tilemap;
+	/* devices */
+	running_device	*maincpu;
+	running_device	*audiocpu;
 
-	UINT16 *fgvideoram;
-	UINT16 *bg0videoram;
-	UINT16 *bg1videoram;
-	UINT16 *spvideoram;
-	UINT16 *spvideoram_old;
-	size_t spvideoram_size;
+	/* memory pointers */
+	UINT16		*fgvideoram;
+	UINT16		*bg0videoram;
+	UINT16		*bg1videoram;
+	UINT16		*spvideoram;
+	UINT16		*spvideoram_old;
 
-	int video_enable;
-	int irqs_enable;
-	int raster_scanline;
-	int raster_irq_enable;
-	int vblank;
-	int prev_value;
+	/* memory size */
+	size_t		spvideoram_size;
+
+	/* video-related */
+	tilemap_t	*fgtilemap;
+	tilemap_t	*bg0tilemap;
+	tilemap_t	*bg1tilemap;
+	INT32		raster_scanline;
+	INT32		raster_irq_enable;
+	INT32		video_enable;
+	INT32		vblank;
+
+	/* misc */
+	INT32		irqs_enable;
+	INT32		prev_value;
 };
 
 
 /*----------- defined in video/shadfrce.c -----------*/
 
-WRITE16_HANDLER ( shadfrce_bg0scrollx_w );
-WRITE16_HANDLER ( shadfrce_bg1scrollx_w );
-WRITE16_HANDLER ( shadfrce_bg0scrolly_w );
-WRITE16_HANDLER ( shadfrce_bg1scrolly_w );
+WRITE16_HANDLER( shadfrce_bg0scrollx_w );
+WRITE16_HANDLER( shadfrce_bg1scrollx_w );
+WRITE16_HANDLER( shadfrce_bg0scrolly_w );
+WRITE16_HANDLER( shadfrce_bg1scrolly_w );
 
 VIDEO_START( shadfrce );
 VIDEO_EOF(shadfrce);

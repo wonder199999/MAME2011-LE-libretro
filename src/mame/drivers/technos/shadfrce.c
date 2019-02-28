@@ -125,7 +125,6 @@ Samples:
 
 *******************************************************************************/
 
-
 /*
 68k interrupts
 lev 1 : 0x64 : 0004 fd00 - raster irq
@@ -138,143 +137,25 @@ lev 7 : 0x7c : 0000 11d0 - just rte
 */
 
 #include "emu.h"
+
 #include "cpu/z80/z80.h"
 #include "cpu/m68000/m68000.h"
 #include "sound/2151intf.h"
 #include "sound/okim6295.h"
+
 #include "includes/shadfrce.h"
 
 
-#define MASTER_CLOCK		XTAL_28MHz
-#define CPU_CLOCK			MASTER_CLOCK / 2
-#define PIXEL_CLOCK		MASTER_CLOCK / 4
-
-static WRITE16_HANDLER( shadfrce_flip_screen )
-{
-	flip_screen_set(space->machine, data & 0x01);
-}
+#define MASTER_CLOCK	(XTAL_28MHz)
+#define CPU_CLOCK	MASTER_CLOCK / 2
+#define PIXEL_CLOCK	MASTER_CLOCK / 4
 
 
-/* Ports mapping :
-
-    $1d0020.w : 0123456789ABCDEF
-                x---------------    right     (player 1)
-                -x--------------    left      (player 1)
-                --x-------------    up        (player 1)
-                ---x------------    down      (player 1)
-                ----x-----------    button 1  (player 1)
-                -----x----------    button 2  (player 1)
-                ------x---------    button 3  (player 1)
-                -------x--------    start     (player 1)
-                --------x-------    coin 1
-                ---------x------    coin 2                       *
-                ----------x-----    service 1                    *
-                -----------x----    unused
-                ------------x---    DIP2-7
-                -------------x--    DIP2-8
-                --------------x-    unused
-                ---------------x    unused
-
-    $1d0022.w : 0123456789ABCDEF
-                x---------------    right     (player 2)
-                -x--------------    left      (player 2)
-                --x-------------    up        (player 2)
-                ---x------------    down      (player 2)
-                ----x-----------    button 1  (player 2)
-                -----x----------    button 2  (player 2)
-                ------x---------    button 3  (player 2)
-                -------x--------    start     (player 2)
-                --------x-------    DIP2-1    ("Difficulty")
-                ---------x------    DIP2-2    ("Difficulty")
-                ----------x-----    DIP2-3    ("Stage Clear Energy Regain")
-                -----------x----    DIP2-4    ("Stage Clear Energy Regain")
-                ------------x---    DIP2-5
-                -------------x--    DIP2-6
-                --------------x-    unused
-                ---------------x    unused
-
-    $1d0024.w : 0123456789ABCDEF
-                x---------------    button 4  (player 1)
-                -x--------------    button 5  (player 1)
-                --x-------------    button 6  (player 1)
-                ---x------------    button 4  (player 2)
-                ----x-----------    button 5  (player 2)
-                -----x----------    button 6  (player 2)
-                ------x---------    unused
-                -------x--------    unused
-                --------x-------    DIP1-1
-                ---------x------    DIP1-2    ("Coin(s) for Credit(s)")
-                ----------x-----    DIP1-3    ("Coin(s) for Credit(s)")
-                -----------x----    DIP1-4    (DEF_STR( Continue_Price ))
-                ------------x---    DIP1-5    ("Free Play")
-                -------------x--    DIP1-6    ("Flip Screen")
-                --------------x-    unused
-                ---------------x    unused
-
-    $1d0026.w : 0123456789ABCDEF
-                x---------------    unused
-                -x--------------    unused
-                --x-------------    unused
-                ---x------------    unused
-                ----x-----------    unused
-                -----x----------    unused
-                ------x---------    unused
-                -------x--------    unused
-                --------x-------    DIP 1-7   ("Demo Sound")
-                ---------x------    DIP 1-8   ("Test Mode")
-                ----------x-----    vblank?
-                -----------x----    unused
-                ------------x---    unknown
-                -------------x--    unused
-                --------------x-    unused
-                ---------------x    unused
-
-    * only available when you are in "test mode"
-
-*/
-
-
-static READ16_HANDLER( shadfrce_input_ports_r )
-{
-	shadfrce_state *state = space->machine->driver_data<shadfrce_state>();
-	UINT16 data = 0xffff;
-
-	switch (offset)
-	{
-		case 0 :
-			data = (input_port_read(space->machine, "P1") & 0xff) | ((input_port_read(space->machine, "DSW2") & 0xc0) << 6) | ((input_port_read(space->machine, "SYSTEM") & 0x0f) << 8);
-			break;
-		case 1 :
-			data = (input_port_read(space->machine, "P2") & 0xff) | ((input_port_read(space->machine, "DSW2") & 0x3f) << 8);
-			break;
-		case 2 :
-			data = (input_port_read(space->machine, "EXTRA") & 0xff) | ((input_port_read(space->machine, "DSW1") & 0x3f) << 8);
-			break;
-		case 3 :
-			data = (input_port_read(space->machine, "OTHER") & 0xff) | ((input_port_read(space->machine, "DSW1") & 0xc0) << 2) | ((input_port_read(space->machine, "MISC") & 0x38) << 8) | (state->vblank << 8);
-			break;
-	}
-
-	return (data);
-}
-
-
-static WRITE16_HANDLER ( shadfrce_sound_brt_w )
-{
-	if (ACCESSING_BITS_8_15)
-	{
-		soundlatch_w(space, 1, data >> 8);
-		cputag_set_input_line(space->machine, "audiocpu", INPUT_LINE_NMI, PULSE_LINE );
-	}
-	else
-	{
-		int i;
-		double brt = (data & 0xff) / 255.0;
-
-		for (i = 0; i < 0x4000; i++)
-			palette_set_pen_contrast(space->machine, i, brt);
-	}
-}
+/*************************************
+ *
+ *	Interrupt control
+ *
+ *************************************/
 
 static WRITE16_HANDLER( shadfrce_irq_ack_w )
 {
@@ -285,23 +166,100 @@ static WRITE16_HANDLER( shadfrce_irq_w )
 {
 	shadfrce_state *state = space->machine->driver_data<shadfrce_state>();
 
-	state->irqs_enable = data & 1;	/* maybe, it's set/unset inside every trap instruction which is executed */
-	state->video_enable = data & 8;	/* probably */
+	state->irqs_enable = data & 0x01;	/* maybe, it's set/unset inside every trap instruction which is executed */
+	state->video_enable = data & 0x08;	/* probably */
 
 	/* check if there's a high transition to enable the raster IRQ */
-	if((~state->prev_value & 4) && (data & 4))
+	if ((~state->prev_value & 0x04) && (data & 0x04))
 	{
 		state->raster_irq_enable = 1;
 	}
 
 	/* check if there's a low transition to disable the raster IRQ */
-	if((state->prev_value & 4) && (~data & 4))
+	if ((state->prev_value & 0x04) && (~data & 0x04))
 	{
 		state->raster_irq_enable = 0;
 	}
 
 	state->prev_value = data;
 }
+
+
+/* Ports mapping :
+
+    $1d0020.w : 0123456789ABCDEF					$1d0022.w : 0123456789ABCDEF
+                x---------------    right     (player 1)                	    x---------------    right     (player 2)
+                -x--------------    left      (player 1)			    -x--------------    left      (player 2)
+                --x-------------    up        (player 1)			    --x-------------    up        (player 2)
+                ---x------------    down      (player 1)			    ---x------------    down      (player 2)
+                ----x-----------    button 1  (player 1)			    ----x-----------    button 1  (player 2)
+                -----x----------    button 2  (player 1)			    -----x----------    button 2  (player 2)
+                ------x---------    button 3  (player 1)			    ------x---------    button 3  (player 2)
+                -------x--------    start     (player 1)			    -------x--------    start     (player 2)
+                --------x-------    coin 1					    --------x-------    DIP2-1    ("Difficulty")
+                ---------x------    coin 2                       *		    ---------x------    DIP2-2    ("Difficulty")
+                ----------x-----    service 1                    *		    ----------x-----    DIP2-3    ("Stage Clear Energy Regain")
+                -----------x----    unused					    -----------x----    DIP2-4    ("Stage Clear Energy Regain")
+                ------------x---    DIP2-7					    ------------x---    DIP2-5
+                -------------x--    DIP2-8					    -------------x--    DIP2-6
+                --------------x-    unused					    --------------x-    unused
+                ---------------x    unused					    ---------------x    unused
+
+
+    $1d0024.w : 0123456789ABCDEF					$1d0026.w : 0123456789ABCDEF
+                x---------------    button 4  (player 1)			    x---------------    unused
+                -x--------------    button 5  (player 1)			    -x--------------    unused
+                --x-------------    button 6  (player 1)			    --x-------------    unused
+                ---x------------    button 4  (player 2)			    ---x------------    unused
+                ----x-----------    button 5  (player 2)			    ----x-----------    unused
+                -----x----------    button 6  (player 2)			    -----x----------    unused
+                ------x---------    unused					    ------x---------    unused
+                -------x--------    unused					    -------x--------    unused
+                --------x-------    DIP1-1					    --------x-------    DIP 1-7   ("Demo Sound")
+                ---------x------    DIP1-2    ("Coin(s) for Credit(s)")		    ---------x------    DIP 1-8   ("Test Mode")
+                ----------x-----    DIP1-3    ("Coin(s) for Credit(s)")		    ----------x-----    vblank?
+                -----------x----    DIP1-4    (DEF_STR( Continue_Price ))	    -----------x----    unused
+                ------------x---    DIP1-5    ("Free Play")			    ------------x---    unknown
+                -------------x--    DIP1-6    ("Flip Screen")			    -------------x--    unused
+                --------------x-    unused					    --------------x-    unused
+                ---------------x    unused					    ---------------x    unused
+
+	* only available when you are in "test mode"
+
+*/
+
+static READ16_HANDLER( shadfrce_input_ports_r )
+{
+	shadfrce_state *state = space->machine->driver_data<shadfrce_state>();
+
+	UINT16 data = 0xffff;
+
+	switch (offset)
+	{
+		case 0 :
+			data = (input_port_read(space->machine, "P1") & 0xff) | ((input_port_read(space->machine, "DSW2") & 0xc0) << 6) |
+				((input_port_read(space->machine, "SYSTEM") & 0x0f) << 8);
+			break;
+		case 1 :
+			data = (input_port_read(space->machine, "P2") & 0xff) | ((input_port_read(space->machine, "DSW2") & 0x3f) << 8);
+			break;
+		case 2 :
+			data = (input_port_read(space->machine, "EXTRA") & 0xff) | ((input_port_read(space->machine, "DSW1") & 0x3f) << 8);
+			break;
+		case 3 :
+			data = (input_port_read(space->machine, "OTHER") & 0xff) | ((input_port_read(space->machine, "DSW1") & 0xc0) << 2) |
+				((input_port_read(space->machine, "MISC") & 0x38) << 8) | (state->vblank << 8);
+			break;
+	}
+
+	return data;
+}
+
+/*************************************
+ *
+ *	Interrupt Generators
+ *
+ *************************************/
 
 static WRITE16_HANDLER( shadfrce_scanline_w )
 {
@@ -317,14 +275,10 @@ static TIMER_DEVICE_CALLBACK( shadfrce_scanline )
 
 	/* Vblank is lowered on scanline 0 */
 	if (scanline == 0)
-	{
 		state->vblank = 0;
-	}
 	/* Hack */
-	else if (scanline == (248-1))		/* -1 is an hack needed to avoid deadlocks */
-	{
+	else if (scanline == 248 - 1)		/* -1 is an hack needed to avoid deadlocks */
 		state->vblank = 4;
-	}
 
 	/* Raster interrupt - Perform raster effect on given scanline */
 	if (state->raster_irq_enable)
@@ -334,35 +288,77 @@ static TIMER_DEVICE_CALLBACK( shadfrce_scanline )
 			state->raster_scanline = (state->raster_scanline + 1) % 240;
 			if (state->raster_scanline > 0)
 				timer.machine->primary_screen->update_partial(state->raster_scanline - 1);
-			cputag_set_input_line(timer.machine, "maincpu", 1, ASSERT_LINE);
+
+			cpu_set_input_line(state->maincpu, 1, ASSERT_LINE);
 		}
 	}
 
 	/* An interrupt is generated every 16 scanlines */
 	if (state->irqs_enable)
 	{
-		if (scanline % 16 == 0)
+		if ((scanline & 0x0f) == 0)
 		{
 			if (scanline > 0)
 				timer.machine->primary_screen->update_partial(scanline - 1);
-			cputag_set_input_line(timer.machine, "maincpu", 2, ASSERT_LINE);
+			cpu_set_input_line(state->maincpu, 2, ASSERT_LINE);
 		}
-	}
-
-	/* Vblank is raised on scanline 248 */
-	if (state->irqs_enable)
-	{
-		if (scanline == 248)
+		/* Vblank is raised on scanline 248 */
+		else if (scanline == 248)
 		{
 			timer.machine->primary_screen->update_partial(scanline - 1);
-			cputag_set_input_line(timer.machine, "maincpu", 3, ASSERT_LINE);
+			cpu_set_input_line(state->maincpu, 3, ASSERT_LINE);
 		}
 	}
 }
 
+static WRITE16_HANDLER( shadfrce_flip_screen )
+{
+	flip_screen_set(space->machine, data & 0x01);
+}
 
 
-/* Memory Maps */
+/*************************************
+ *
+ *  Sound definitions
+ *
+ *************************************/
+
+static WRITE16_HANDLER ( shadfrce_sound_brt_w )
+{
+	if (ACCESSING_BITS_8_15)
+	{
+		soundlatch_w(space, 1, data >> 8);
+		cputag_set_input_line(space->machine, "audiocpu", INPUT_LINE_NMI, PULSE_LINE);
+	}
+	else	/*  set screen brightness */
+	{
+		double brt = (data & 0xff) / 255.0;
+
+		for (int i = 0; i < 0x4000; i++)
+			palette_set_pen_contrast(space->machine, i, brt);
+	}
+}
+
+static WRITE8_DEVICE_HANDLER( oki_bankswitch_w )
+{
+	downcast<okim6295_device *>(device)->set_bank_base((data & 0x01) * 0x40000);
+}
+
+static void irq_handler(running_device *device, int irq)
+{
+	cputag_set_input_line(device->machine, "audiocpu", 0, irq ? ASSERT_LINE : CLEAR_LINE );
+}
+
+static const ym2151_interface ym2151_config = {
+	irq_handler
+};
+
+
+/*************************************
+ *
+ *	Main CPU memory maps
+ *
+ *************************************/
 
 static ADDRESS_MAP_START( shadfrce_map, ADDRESS_SPACE_PROGRAM, 16 )
 	AM_RANGE(0x000000, 0x0fffff) AM_ROM
@@ -392,12 +388,11 @@ static ADDRESS_MAP_START( shadfrce_map, ADDRESS_SPACE_PROGRAM, 16 )
 	AM_RANGE(0x1f0000, 0x1fffff) AM_RAM
 ADDRESS_MAP_END
 
-/* and the sound cpu */
-
-static WRITE8_DEVICE_HANDLER( oki_bankswitch_w )
-{
-	downcast<okim6295_device *>(device)->set_bank_base((data & 1) * 0x40000);
-}
+/*************************************
+ *
+ *	Audio CPU memory maps
+ *
+ *************************************/
 
 static ADDRESS_MAP_START( shadfrce_sound_map, ADDRESS_SPACE_PROGRAM, 8 )
 	AM_RANGE(0x0000, 0xbfff) AM_ROM
@@ -410,28 +405,32 @@ static ADDRESS_MAP_START( shadfrce_sound_map, ADDRESS_SPACE_PROGRAM, 8 )
 ADDRESS_MAP_END
 
 
-/* Input Ports */
+/*************************************
+ *
+ *	Input ports
+ *
+ *************************************/
 
 /* Similar to MUGSMASH_PLAYER_INPUT in drivers/mugsmash.c */
-#define SHADFRCE_PLAYER_INPUT( player, start ) \
-	PORT_BIT( 0x0001, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_PLAYER(player) PORT_8WAY \
-	PORT_BIT( 0x0002, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_PLAYER(player) PORT_8WAY \
-	PORT_BIT( 0x0004, IP_ACTIVE_LOW, IPT_JOYSTICK_UP ) PORT_PLAYER(player) PORT_8WAY \
-	PORT_BIT( 0x0008, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN ) PORT_PLAYER(player) PORT_8WAY \
-	PORT_BIT( 0x0010, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER(player) \
-	PORT_BIT( 0x0020, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER(player) \
-	PORT_BIT( 0x0040, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER(player) \
+
+#define SHADFRCE_PLAYER_INPUT( player, start )							\
+	PORT_BIT( 0x0001, IP_ACTIVE_LOW, IPT_JOYSTICK_RIGHT ) PORT_PLAYER(player) PORT_8WAY	\
+	PORT_BIT( 0x0002, IP_ACTIVE_LOW, IPT_JOYSTICK_LEFT ) PORT_PLAYER(player) PORT_8WAY	\
+	PORT_BIT( 0x0004, IP_ACTIVE_LOW, IPT_JOYSTICK_UP ) PORT_PLAYER(player) PORT_8WAY	\
+	PORT_BIT( 0x0008, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN ) PORT_PLAYER(player) PORT_8WAY	\
+	PORT_BIT( 0x0010, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_PLAYER(player)			\
+	PORT_BIT( 0x0020, IP_ACTIVE_LOW, IPT_BUTTON2 ) PORT_PLAYER(player)			\
+	PORT_BIT( 0x0040, IP_ACTIVE_LOW, IPT_BUTTON3 ) PORT_PLAYER(player)			\
 	PORT_BIT( 0x0080, IP_ACTIVE_LOW, start )
 
 
 static INPUT_PORTS_START( shadfrce )
 	PORT_START("P1")		/* Fake IN0 (player 1 inputs) */
 	SHADFRCE_PLAYER_INPUT( 1, IPT_START1 )
-
 	PORT_START("P2")		/* Fake IN1 (player 2 inputs) */
 	SHADFRCE_PLAYER_INPUT( 2, IPT_START2 )
 
-	PORT_START("EXTRA")	/* Fake IN2 (players 1 & 2 extra inputs */
+	PORT_START("EXTRA")		/* Fake IN2 (players 1 & 2 extra inputs */
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_BUTTON4 ) PORT_PLAYER(1)
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_BUTTON5 ) PORT_PLAYER(1)
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_BUTTON6 ) PORT_PLAYER(1)
@@ -441,21 +440,21 @@ static INPUT_PORTS_START( shadfrce )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNUSED )
 	PORT_BIT( 0x80, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("OTHER")	/* Fake IN3 (other extra inputs ?) */
+	PORT_START("OTHER")		/* Fake IN3 (other extra inputs ?) */
 	PORT_BIT( 0xff, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("SYSTEM")	/* Fake IN4 (system inputs) */
+	PORT_START("SYSTEM")		/* Fake IN4 (system inputs) */
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_COIN1 )
-	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_COIN2 )			/* only in "test mode" ? */
-	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_SERVICE1 )			/* only in "test mode" ? */
+	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_COIN2 )		/* only in "test mode" ? */
+	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_SERVICE1 )		/* only in "test mode" ? */
 	PORT_BIT( 0xf8, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("MISC")	/* Fake IN5 (misc) */
-	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_SPECIAL )			/* guess */
-	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_UNKNOWN )			/* must be ACTIVE_LOW or 'shadfrcj' jumps to the end (code at 0x04902e) */
+	PORT_START("MISC")		/* Fake IN5 (misc) */
+	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_SPECIAL )		/* guess */
+	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_UNKNOWN )		/* must be ACTIVE_LOW or 'shadfrcj' jumps to the end (code at 0x04902e) */
 	PORT_BIT( 0xeb, IP_ACTIVE_LOW, IPT_UNUSED )
 
-	PORT_START("DSW1")	/* Fake IN6 (DIP1) */
+	PORT_START("DSW1")		/* Fake IN6 (DIP1) */
 	PORT_DIPNAME( 0x01, 0x01, "Unused DIP 1-1" )
 	PORT_DIPSETTING(    0x01, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
@@ -478,12 +477,12 @@ static INPUT_PORTS_START( shadfrce )
 	PORT_DIPSETTING(    0x40, DEF_STR( On ) )
 	PORT_SERVICE( 0x80, IP_ACTIVE_LOW )
 
-	PORT_START("DSW2")	/* Fake IN7 (DIP2) */
+	PORT_START("DSW2")		/* Fake IN7 (DIP2) */
 	PORT_DIPNAME( 0x03, 0x03, DEF_STR( Difficulty ) )
 	PORT_DIPSETTING(    0x01, DEF_STR( Easy ) )
 	PORT_DIPSETTING(    0x03, DEF_STR( Normal ) )
-	PORT_DIPSETTING(    0x02, DEF_STR( Hard ) )                  /* "Advanced" */
-	PORT_DIPSETTING(    0x00, DEF_STR( Hardest ) )               /* "Expert" */
+	PORT_DIPSETTING(    0x02, DEF_STR( Hard ) )		/* "Advanced" */
+	PORT_DIPSETTING(    0x00, DEF_STR( Hardest ) )		/* "Expert" */
 	PORT_DIPNAME( 0x0c, 0x0c, "Stage Clear Energy Regain" )
 	PORT_DIPSETTING(    0x04, "50%" )
 	PORT_DIPSETTING(    0x0c, "25%" )
@@ -503,96 +502,139 @@ static INPUT_PORTS_START( shadfrce )
 	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
 INPUT_PORTS_END
 
-/* Graphic Decoding */
+/*************************************
+ *
+ *	Graphics layouts
+ *
+ *************************************/
 
-static const gfx_layout fg8x8x4_layout =
-{
+static const gfx_layout fg8x8x4_layout = {
 	8,8,
 	RGN_FRAC(1,1),
 	4,
-	{ 0, 2, 4, 6 },
+	{ STEP4(0,2) },
 	{ 1, 0, 8*8+1, 8*8+0, 16*8+1, 16*8+0, 24*8+1, 24*8+0 },
-	{ 0*8, 1*8, 2*8, 3*8, 4*8, 5*8, 6*8, 7*8 },
+	{ STEP8(0,8) },
 	32*8
 };
 
-static const gfx_layout sp16x16x5_layout =
-{
+static const gfx_layout sp16x16x5_layout = {
 	16,16,
 	RGN_FRAC(1,5),
 	5,
 	{ 0x800000*8, 0x600000*8, 0x400000*8, 0x200000*8, 0x000000*8 },
-	{ 0,1,2,3,4,5,6,7,16*8+0,16*8+1,16*8+2,16*8+3,16*8+4,16*8+5,16*8+6,16*8+7 },
-	{ 0*8, 1*8, 2*8, 3*8, 4*8, 5*8, 6*8, 7*8, 8*8,9*8,10*8,11*8,12*8,13*8,14*8,15*8 },
+	{ STEP8(0,1), STEP8(16*8,1) },
+	{ STEP16(0,8) },
 	16*16
 };
 
-static const gfx_layout bg16x16x6_layout =
-{
+static const gfx_layout bg16x16x6_layout = {
 	16,16,
 	RGN_FRAC(1,3),
 	6,
 	{ 0x000000*8+8, 0x000000*8+0, 0x100000*8+8, 0x100000*8+0, 0x200000*8+8, 0x200000*8+0 },
-	{ 0, 1, 2, 3, 4, 5, 6, 7,16*16+0,16*16+1,16*16+2,16*16+3,16*16+4,16*16+5,16*16+6,16*16+7 },
-	{ 0*16, 1*16, 2*16, 3*16, 4*16, 5*16, 6*16, 7*16, 8*16,9*16,10*16,11*16,12*16,13*16,14*16,15*16 },
+	{ STEP8(0,1), STEP8(16*16,1) },
+	{ STEP16(0,16) },
 	64*8
 };
 
+
+/*************************************
+ *
+ *	Graphics Decode Info
+ *
+ *************************************/
+
 static GFXDECODE_START( shadfrce )
-	GFXDECODE_ENTRY( "chars", 0, fg8x8x4_layout,   0x0000, 256 )
+	GFXDECODE_ENTRY( "chars", 0, fg8x8x4_layout, 0x0000, 256 )
 	GFXDECODE_ENTRY( "sprites", 0, sp16x16x5_layout, 0x1000, 128 )
 	GFXDECODE_ENTRY( "tiles", 0, bg16x16x6_layout, 0x2000, 128 )
 GFXDECODE_END
 
-/* Machine Driver Bits */
 
-static void irq_handler(running_device *device, int irq)
+/*************************************
+ *
+ *  System setup and intialization
+ *
+ *************************************/
+
+static MACHINE_START( shadfrce )
 {
-	cputag_set_input_line(device->machine, "audiocpu", 0, irq ? ASSERT_LINE : CLEAR_LINE );
+	shadfrce_state *state = machine->driver_data<shadfrce_state>();
+
+	state->maincpu = machine->device("maincpu");
+	state->audiocpu = machine->device("audiocpu");
+
+	/* register for save states */
+	state_save_register_global(machine, state->vblank);
+	state_save_register_global(machine, state->prev_value);
+	state_save_register_global(machine, state->video_enable);
+	state_save_register_global(machine, state->irqs_enable);
+	state_save_register_global(machine, state->raster_scanline);
+	state_save_register_global(machine, state->raster_irq_enable);
 }
 
-static const ym2151_interface ym2151_config =
+static MACHINE_RESET( shadfrce )
 {
-	irq_handler
-};
+	shadfrce_state *state = machine->driver_data<shadfrce_state>();
+
+	state->vblank = 0;
+	state->prev_value = 0;
+	state->video_enable = 0;
+	state->irqs_enable = 0;
+	state->raster_scanline = 0;
+	state->raster_irq_enable = 0;
+}
+
+/*************************************
+ *
+ *  Machine drivers
+ *
+ *************************************/
 
 static MACHINE_DRIVER_START( shadfrce )
 	/* driver data */
 	MDRV_DRIVER_DATA(shadfrce_state)
 
-	MDRV_CPU_ADD("maincpu", M68000, CPU_CLOCK)			/* verified on pcb */
+	/* basic machine hardware */
+	MDRV_CPU_ADD("maincpu", M68000, CPU_CLOCK)	/* verified on pcb */
 	MDRV_CPU_PROGRAM_MAP(shadfrce_map)
 	MDRV_TIMER_ADD_SCANLINE("scantimer", shadfrce_scanline, "screen", 0, 1)
-
-	MDRV_CPU_ADD("audiocpu", Z80, XTAL_3_579545MHz)			/* verified on pcb */
+	MDRV_CPU_ADD("audiocpu", Z80, XTAL_3_579545MHz)	/* verified on pcb */
 	MDRV_CPU_PROGRAM_MAP(shadfrce_sound_map)
+	MDRV_MACHINE_START(shadfrce)
+	MDRV_MACHINE_RESET(shadfrce)
 
+	/* video hardware */
 	MDRV_SCREEN_ADD("screen", RASTER)
 	MDRV_SCREEN_FORMAT(BITMAP_FORMAT_INDEXED16)
 	MDRV_SCREEN_RAW_PARAMS(PIXEL_CLOCK, 432, 0, 320, 272, 8, 248)	/* HTOTAL and VTOTAL are guessed */
-
 	MDRV_GFXDECODE(shadfrce)
 	MDRV_PALETTE_LENGTH(0x4000)
-
 	MDRV_VIDEO_START(shadfrce)
 	MDRV_VIDEO_EOF(shadfrce)
 	MDRV_VIDEO_UPDATE(shadfrce)
 
 	/* sound hardware */
 	MDRV_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
-
 	MDRV_SOUND_ADD("ymsnd", YM2151, XTAL_3_579545MHz)		/* verified on pcb */
 	MDRV_SOUND_CONFIG(ym2151_config)
 	MDRV_SOUND_ROUTE(0, "lspeaker", 0.50)
 	MDRV_SOUND_ROUTE(1, "rspeaker", 0.50)
-
 	MDRV_OKIM6295_ADD("oki", XTAL_13_4952MHz/8, OKIM6295_PIN7_HIGH)	/* verified on pcb */
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "lspeaker", 0.50)
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "rspeaker", 0.50)
 MACHINE_DRIVER_END
 
-/* Rom Defs. */
+
+/*************************************
+ *
+ *	ROM definitions
+ *
+ *************************************/
+
 // one of the high score tables in attract mode ends up corrupt on this set due to the game triggering a text dialog box, is this due to a timing error?
+
 ROM_START( shadfrce )
 	ROM_REGION( 0x100000, "maincpu", 0 ) /* 68000 Code */
 	ROM_LOAD16_BYTE( "32a12-011.34", 0x00001, 0x40000, CRC(0c041e08) SHA1(7b9d52cb1f6bc217c6e64287bd9630aa37243513) ) /* World Version 3 */
@@ -680,8 +722,12 @@ ROM_START( shadfrcej )
 	ROM_LOAD( "32j9-0.76",  0x000000, 0x080000, CRC(16001e81) SHA1(67928d2024f963aee91f1498b6f4c76101d2f3b8) )
 ROM_END
 
+/*************************************
+ *
+ *	  Game drivers
+ *
+ *************************************/
 
 GAME( 1993, shadfrce,   0,        shadfrce, shadfrce,  0, ROT0, "Technos Japan", "Shadow Force (World, Version 3)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
 GAME( 1993, shadfrceu,  shadfrce, shadfrce, shadfrce,  0, ROT0, "Technos Japan", "Shadow Force (US, Version 2)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
 GAME( 1993, shadfrcej,  shadfrce, shadfrce, shadfrce,  0, ROT0, "Technos Japan", "Shadow Force (Japan, Version 2)", GAME_NO_COCKTAIL | GAME_SUPPORTS_SAVE )
-
