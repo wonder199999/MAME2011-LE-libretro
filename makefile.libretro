@@ -55,14 +55,15 @@ OBJDIRS += \
 # updated with any MAME core changes
 #-------------------------------------------------
 
-CPUS += Z80
-CPUS += NEC
-CPUS += MCS48
+CPUS += HD6309
+CPUS += M6502
 CPUS += M680X0
 CPUS += M6800
 CPUS += M6805
 CPUS += M6809
-CPUS += HD6309
+CPUS += MCS48
+CPUS += NEC
+CPUS += Z80
 
 #-------------------------------------------------
 # specify available sound cores; some of these are
@@ -70,15 +71,16 @@ CPUS += HD6309
 #-------------------------------------------------
 
 SOUNDS += DAC
+SOUNDS += IREMGA20
+SOUNDS += MSM5205
+SOUNDS += OKIM6295
+SOUNDS += QSOUND
 SOUNDS += SPEAKER
 SOUNDS += YM2151
 SOUNDS += YM2203
 SOUNDS += YM2608
 SOUNDS += YM2610
-SOUNDS += MSM5205
-SOUNDS += OKIM6295
-SOUNDS += QSOUND
-SOUNDS += IREMGA20
+SOUNDS += YM3526
 
 #-------------------------------------------------
 # this is the list of driver libraries that
@@ -122,6 +124,7 @@ $(MAMEOBJ)/technos.a: \
 	$(DRIVERS)/technos/wwfwfest.o $(VIDEO)/wwfwfest.o \
 	$(DRIVERS)/technos/wwfsstar.o $(VIDEO)/wwfsstar.o \
 	$(DRIVERS)/technos/shadfrce.o $(VIDEO)/shadfrce.o \
+	$(DRIVERS)/technos/renegade.o $(VIDEO)/renegade.o \
 
 $(DRIVERS)/neogeo.o:	$(MAMESRC)/drivers/neogeo/neogeo.inc
 
@@ -384,6 +387,42 @@ $(CPUOBJ)/m6809/m6809.o:   $(CPUSRC)/m6809/m6809.c \
 					$(CPUSRC)/m6809/6809tbl.c
 
 #-------------------------------------------------
+# Mostek 6502 and its many derivatives
+#-------------------------------------------------
+
+ifneq ($(filter M6502,$(CPUS)),)
+OBJDIRS += $(CPUOBJ)/m6502
+CPUOBJS += $(CPUOBJ)/m6502/m6502.o
+CPUOBJS += $(CPUOBJ)/m6502/m6509.o
+CPUOBJS += $(CPUOBJ)/m6502/m65ce02.o
+CPUOBJS += $(CPUOBJ)/m6502/m4510.o
+DASMOBJS += $(CPUOBJ)/m6502/6502dasm.o
+endif
+
+$(CPUOBJ)/m6502/m4510.o:	$(CPUSRC)/m6502/m4510.c \
+					$(CPUSRC)/m6502/t65ce02.c
+
+$(CPUOBJ)/m6502/m6502.o:	$(CPUSRC)/m6502/m6502.c \
+					$(CPUSRC)/m6502/m6502.h \
+						$(CPUSRC)/m6502/ops02.h \
+							$(CPUSRC)/m6502/t6502.c \
+								$(CPUSRC)/m6502/t65c02.c \
+									$(CPUSRC)/m6502/t65sc02.c \
+										$(CPUSRC)/m6502/t6510.c \
+											$(CPUSRC)/m6502/tn2a03.c \
+												$(CPUSRC)/m6502/tdeco16.c
+
+$(CPUOBJ)/m6502/m65ce02.o:	$(CPUSRC)/m6502/m65ce02.c \
+					$(CPUSRC)/m6502/m65ce02.h \
+						$(CPUSRC)/m6502/opsce02.h \
+							$(CPUSRC)/m6502/t65ce02.c
+
+$(CPUOBJ)/m6502/m6509.o:	$(CPUSRC)/m6502/m6509.c \
+					$(CPUSRC)/m6502/m6509.h \
+						$(CPUSRC)/m6502/ops09.h \
+							$(CPUSRC)/m6502/t6509.c
+
+#-------------------------------------------------
 # Zilog Z80
 #-------------------------------------------------
 
@@ -472,6 +511,10 @@ endif
 
 ifneq ($(filter YM2610 YM2610B,$(SOUNDS)),)
 SOUNDOBJS += $(SOUNDOBJ)/2610intf.o $(SOUNDOBJ)/ay8910.o $(SOUNDOBJ)/fm.o $(SOUNDOBJ)/ymdeltat.o
+endif
+
+ifneq ($(filter YM3526,$(SOUNDS)),)
+SOUNDOBJS += $(SOUNDOBJ)/3526intf.o $(SOUNDOBJ)/fmopl.o
 endif
 
 $(LIBSOUND): $(SOUNDOBJS)

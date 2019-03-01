@@ -1140,4 +1140,8 @@ const game_driver *const drivers[] =
 	DRIVER( shadfrceu )
 	DRIVER( shadfrcej )
 
+	DRIVER( renegade )
+	DRIVER( kuniokun )
+	DRIVER( kuniokunb )
+
 #endif	/* DRIVER_RECURSIVE */
