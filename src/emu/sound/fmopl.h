@@ -4,22 +4,22 @@
 #define __FMOPL_H__
 
 /* --- select emulation chips --- */
-#define BUILD_YM3812 (1)
-#define BUILD_YM3526 (1)
-#define BUILD_Y8950  (1)
+#define BUILD_YM3812		(1)
+#define BUILD_YM3526		(1)
+#define BUILD_Y8950		(1)
 
 /* select output bits size of output : 8 or 16 */
-#define OPL_SAMPLE_BITS 16
+#define OPL_SAMPLE_BITS		16
 
 /* compiler dependence */
 #ifndef __OSDCOMM_H__
 #define __OSDCOMM_H__
-typedef unsigned char	UINT8;   /* unsigned  8bit */
-typedef unsigned short	UINT16;  /* unsigned 16bit */
-typedef unsigned int	UINT32;  /* unsigned 32bit */
-typedef signed char		INT8;    /* signed  8bit   */
-typedef signed short	INT16;   /* signed 16bit   */
-typedef signed int		INT32;   /* signed 32bit   */
+typedef unsigned char	UINT8;		/* unsigned  8bit */
+typedef unsigned short	UINT16;		/* unsigned 16bit */
+typedef unsigned int	UINT32;		/* unsigned 32bit */
+typedef signed char	INT8;		/* signed  8bit   */
+typedef signed short	INT16;		/* signed 16bit   */
+typedef signed int	INT32;		/* signed 32bit   */
 #endif /* __OSDCOMM_H__ */
 
 typedef stream_sample_t OPLSAMPLE;

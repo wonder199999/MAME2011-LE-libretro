@@ -74,7 +74,7 @@ Revision History:
 
 
 /* output final shift */
-#if (OPL_SAMPLE_BITS==16)
+#if (OPL_SAMPLE_BITS == 16)
 	#define FINAL_SH	(0)
 	#define MAXOUT		(+32767)
 	#define MINOUT		(-32768)
@@ -110,8 +110,8 @@ Revision History:
 
 
 /* register number to channel number , slot offset */
-#define SLOT1 0
-#define SLOT2 1
+#define SLOT1	0
+#define SLOT2	1
 
 /* Envelope Generator phases */
 
@@ -163,27 +163,29 @@ INLINE signed int acc_calc(signed int value)
 
 
 static FILE *sample[1];
-	#if 1	/*save to MONO file */
-		#define SAVE_ALL_CHANNELS \
-		{	signed int pom = acc_calc(lt); \
-			fputc((unsigned short)pom&0xff,sample[0]); \
-			fputc(((unsigned short)pom>>8)&0xff,sample[0]); \
-		}
-	#else	/*save to STEREO file */
-		#define SAVE_ALL_CHANNELS \
-		{	signed int pom = lt; \
-			fputc((unsigned short)pom&0xff,sample[0]); \
-			fputc(((unsigned short)pom>>8)&0xff,sample[0]); \
-			pom = rt; \
-			fputc((unsigned short)pom&0xff,sample[0]); \
-			fputc(((unsigned short)pom>>8)&0xff,sample[0]); \
-		}
-	#endif
+
+#if 1	/*save to MONO file */
+	#define SAVE_ALL_CHANNELS				\
+	{							\
+		signed int pom = acc_calc(lt);			\
+		fputc((unsigned short)pom&0xff,sample[0]);	\
+		fputc(((unsigned short)pom>>8)&0xff,sample[0]);	\
+	}
+#else	/*save to STEREO file */
+	#define SAVE_ALL_CHANNELS				\
+	{							\
+		signed int pom = lt;				\
+		fputc((unsigned short)pom&0xff,sample[0]);	\
+		fputc(((unsigned short)pom>>8)&0xff,sample[0]); \
+		pom = rt;					\
+		fputc((unsigned short)pom&0xff,sample[0]);	\
+		fputc(((unsigned short)pom>>8)&0xff,sample[0]); \
+	}
 #endif
+#endif	/* SAVE_SAMPLE */
 
 #define LOG_CYM_FILE 0
-static FILE * cymfile = NULL;
-
+static FILE *cymfile = NULL;
 
 
 #define OPL_TYPE_WAVESEL   0x01  /* waveform select     */
@@ -197,12 +199,11 @@ static FILE * cymfile = NULL;
 #define OPL_TYPE_Y8950  (OPL_TYPE_ADPCM|OPL_TYPE_KEYBOARD|OPL_TYPE_IO)
 
 
-
 typedef struct
 {
-	UINT32	ar;			/* attack rate: AR<<2           */
-	UINT32	dr;			/* decay rate:  DR<<2           */
-	UINT32	rr;			/* release rate:RR<<2           */
+	UINT32	ar;		/* attack rate: AR<<2           */
+	UINT32	dr;		/* decay rate:  DR<<2           */
+	UINT32	rr;		/* release rate:RR<<2           */
 	UINT8	KSR;		/* key scale rate               */
 	UINT8	ksl;		/* keyscale level               */
 	UINT8	ksr;		/* key scale rate: kcode>>KSR   */
@@ -211,7 +212,7 @@ typedef struct
 	/* Phase Generator */
 	UINT32	Cnt;		/* frequency counter            */
 	UINT32	Incr;		/* frequency counter step       */
-	UINT8   FB;			/* feedback shift value         */
+	UINT8   FB;		/* feedback shift value         */
 	INT32   *connect1;	/* slot1 output pointer         */
 	INT32   op1_out[2];	/* slot1 output for feedback    */
 	UINT8   CON;		/* connection (algorithm) type  */
@@ -219,10 +220,10 @@ typedef struct
 	/* Envelope Generator */
 	UINT8	eg_type;	/* percussive/non-percussive mode */
 	UINT8	state;		/* phase type                   */
-	UINT32	TL;			/* total level: TL << 2         */
+	UINT32	TL;		/* total level: TL << 2         */
 	INT32	TLL;		/* adjusted now TL              */
 	INT32	volume;		/* envelope counter             */
-	UINT32	sl;			/* sustain level: sl_tab[SL]    */
+	UINT32	sl;		/* sustain level: sl_tab[SL]    */
 	UINT8	eg_sh_ar;	/* (attack state)               */
 	UINT8	eg_sel_ar;	/* (attack state)               */
 	UINT8	eg_sh_dr;	/* (decay state)                */
@@ -244,7 +245,7 @@ typedef struct
 	OPL_SLOT SLOT[2];
 	/* phase generator state */
 	UINT32  block_fnum;	/* block+fnum                   */
-	UINT32  fc;			/* Freq. Increment base         */
+	UINT32  fc;		/* Freq. Increment base         */
 	UINT32  ksl_base;	/* KeyScaleLevel Base step      */
 	UINT8   kcode;		/* key code (for key scaling)   */
 } OPL_CH;
@@ -253,14 +254,14 @@ typedef struct
 typedef struct
 {
 	/* FM channel slots */
-	OPL_CH	P_CH[9];				/* OPL/OPL2 chips have 9 channels*/
+	OPL_CH	P_CH[9];			/* OPL/OPL2 chips have 9 channels*/
 
-	UINT32	eg_cnt;					/* global envelope generator counter    */
-	UINT32	eg_timer;				/* global envelope generator counter works at frequency = chipclock/72 */
+	UINT32	eg_cnt;				/* global envelope generator counter    */
+	UINT32	eg_timer;			/* global envelope generator counter works at frequency = chipclock/72 */
 	UINT32	eg_timer_add;			/* step of eg_timer                     */
 	UINT32	eg_timer_overflow;		/* envelope generator timer overlfows every 1 sample (on real chip) */
 
-	UINT8	rhythm;					/* Rhythm mode                  */
+	UINT8	rhythm;				/* Rhythm mode                  */
 
 	UINT32	fn_tab[1024];			/* fnumber->increment counter   */
 
@@ -275,14 +276,14 @@ typedef struct
 	UINT32	lfo_pm_cnt;
 	UINT32	lfo_pm_inc;
 
-	UINT32	noise_rng;				/* 23 bit noise shift register  */
-	UINT32	noise_p;				/* current noise 'phase'        */
-	UINT32	noise_f;				/* current noise period         */
+	UINT32	noise_rng;			/* 23 bit noise shift register  */
+	UINT32	noise_p;			/* current noise 'phase'        */
+	UINT32	noise_f;			/* current noise period         */
 
-	UINT8	wavesel;				/* waveform select enable flag  */
+	UINT8	wavesel;			/* waveform select enable flag  */
 
-	UINT32	T[2];					/* timer counters               */
-	UINT8	st[2];					/* timer enable                 */
+	UINT32	T[2];				/* timer counters               */
+	UINT8	st[2];				/* timer enable                 */
 
 #if BUILD_Y8950
 	/* Delta-T ADPCM unit (Y8950) */
@@ -299,39 +300,37 @@ typedef struct
 	OPL_PORTHANDLER_W keyboardhandler_w;
 	void *	keyboard_param;
 #endif
-
 	/* external event callback handlers */
 	OPL_TIMERHANDLER  timer_handler;	/* TIMER handler                */
-	void *TimerParam;					/* TIMER parameter              */
-	OPL_IRQHANDLER    IRQHandler;	/* IRQ handler                  */
-	void *IRQParam;					/* IRQ parameter                */
-	OPL_UPDATEHANDLER UpdateHandler;/* stream update handler        */
-	void *UpdateParam;				/* stream update parameter      */
+	void *TimerParam;			/* TIMER parameter              */
+	OPL_IRQHANDLER    IRQHandler;		/* IRQ handler                  */
+	void *IRQParam;				/* IRQ parameter                */
+	OPL_UPDATEHANDLER UpdateHandler;	/* stream update handler        */
+	void *UpdateParam;			/* stream update parameter      */
 
-	UINT8 type;						/* chip type                    */
-	UINT8 address;					/* address register             */
-	UINT8 status;					/* status flag                  */
-	UINT8 statusmask;				/* status mask                  */
-	UINT8 mode;						/* Reg.08 : CSM,notesel,etc.    */
+	UINT8 type;				/* chip type                    */
+	UINT8 address;				/* address register             */
+	UINT8 status;				/* status flag                  */
+	UINT8 statusmask;			/* status mask                  */
+	UINT8 mode;				/* Reg.08 : CSM,notesel,etc.    */
 
-	UINT32 clock;					/* master clock  (Hz)           */
-	UINT32 rate;					/* sampling rate (Hz)           */
-	double freqbase;				/* frequency base               */
+	UINT32 clock;				/* master clock  (Hz)           */
+	UINT32 rate;				/* sampling rate (Hz)           */
+	double freqbase;			/* frequency base               */
 	attotime TimerBase;			/* Timer base time (==sampling time)*/
 	running_device *device;
 
-	signed int phase_modulation;	/* phase modulation input (SLOT 2) */
+	signed int phase_modulation;		/* phase modulation input (SLOT 2) */
 	signed int output[1];
 #if BUILD_Y8950
-	INT32 output_deltat[4];		/* for Y8950 DELTA-T, chip is mono, that 4 here is just for safety */
+	INT32 output_deltat[4];			/* for Y8950 DELTA-T, chip is mono, that 4 here is just for safety */
 #endif
 } FM_OPL;
 
 
 
 /* mapping of register number (offset) to slot number used by the emulator */
-static const int slot_array[32]=
-{
+static const int slot_array[32] = {
 	 0, 2, 4, 1, 3, 5,-1,-1,
 	 6, 8,10, 7, 9,11,-1,-1,
 	12,14,16,13,15,17,-1,-1,
@@ -341,56 +340,92 @@ static const int slot_array[32]=
 /* key scale level */
 /* table is 3dB/octave , DV converts this into 6dB/octave */
 /* 0.1875 is bit 0 weight of the envelope counter (volume) expressed in the 'decibel' scale */
-#define DV (0.1875/2.0)
-static const UINT32 ksl_tab[8*16]=
-{
+
+#define DV (0.1875 / 2.0)
+#undef ZERO
+#define ZERO	(0)
+static const UINT32 ksl_tab[8 * 16] = {
 	/* OCT 0 */
+		ZERO,	ZERO,	ZERO,	ZERO,
+		ZERO,	ZERO,	ZERO,	ZERO,
+		ZERO,	ZERO,	ZERO,	ZERO,
+		ZERO,	ZERO,	ZERO,	ZERO,
+/*	 0.000/DV, 0.000/DV, 0.000/DV, 0.000/DV,
 	 0.000/DV, 0.000/DV, 0.000/DV, 0.000/DV,
 	 0.000/DV, 0.000/DV, 0.000/DV, 0.000/DV,
-	 0.000/DV, 0.000/DV, 0.000/DV, 0.000/DV,
-	 0.000/DV, 0.000/DV, 0.000/DV, 0.000/DV,
+	 0.000/DV, 0.000/DV, 0.000/DV, 0.000/DV,	*/
 	/* OCT 1 */
-	 0.000/DV, 0.000/DV, 0.000/DV, 0.000/DV,
+		ZERO,	ZERO,	ZERO,	ZERO,
+		ZERO,	ZERO,	ZERO,	ZERO,
+		ZERO,	(UINT32)(0.750/DV),	(UINT32)(1.125/DV),	(UINT32)(1.500/DV),
+		(UINT32)(1.875/DV),	(UINT32)(2.250/DV),	(UINT32)(2.625/DV),	(UINT32)(3.000/DV),
+/*	 0.000/DV, 0.000/DV, 0.000/DV, 0.000/DV,
 	 0.000/DV, 0.000/DV, 0.000/DV, 0.000/DV,
 	 0.000/DV, 0.750/DV, 1.125/DV, 1.500/DV,
-	 1.875/DV, 2.250/DV, 2.625/DV, 3.000/DV,
+	 1.875/DV, 2.250/DV, 2.625/DV, 3.000/DV,	*/
 	/* OCT 2 */
-	 0.000/DV, 0.000/DV, 0.000/DV, 0.000/DV,
+		ZERO,	ZERO,	ZERO,	ZERO,
+		ZERO,	(UINT32)(1.125/DV),	(UINT32)(1.875/DV),	(UINT32)(2.625/DV),
+		(UINT32)(3.000/DV),	(UINT32)(3.750/DV),	(UINT32)(4.125/DV),	(UINT32)(4.500/DV),
+		(UINT32)(4.875/DV),	(UINT32)(5.250/DV),	(UINT32)(5.625/DV),	(UINT32)(6.000/DV),
+/*	 0.000/DV, 0.000/DV, 0.000/DV, 0.000/DV,
 	 0.000/DV, 1.125/DV, 1.875/DV, 2.625/DV,
 	 3.000/DV, 3.750/DV, 4.125/DV, 4.500/DV,
-	 4.875/DV, 5.250/DV, 5.625/DV, 6.000/DV,
+	 4.875/DV, 5.250/DV, 5.625/DV, 6.000/DV,	*/
 	/* OCT 3 */
-	 0.000/DV, 0.000/DV, 0.000/DV, 1.875/DV,
+		ZERO,	ZERO,	ZERO,	(UINT32)(1.875/DV),
+		(UINT32)(3.000/DV),	(UINT32)(4.125/DV),	(UINT32)(4.875/DV),	(UINT32)(5.625/DV),
+		(UINT32)(6.000/DV),	(UINT32)(6.750/DV),	(UINT32)(7.125/DV),	(UINT32)(7.500/DV),
+		(UINT32)(7.875/DV),	(UINT32)(8.250/DV),	(UINT32)(8.625/DV),	(UINT32)(9.000/DV),
+/*	 0.000/DV, 0.000/DV, 0.000/DV, 1.875/DV,
 	 3.000/DV, 4.125/DV, 4.875/DV, 5.625/DV,
 	 6.000/DV, 6.750/DV, 7.125/DV, 7.500/DV,
-	 7.875/DV, 8.250/DV, 8.625/DV, 9.000/DV,
+	 7.875/DV, 8.250/DV, 8.625/DV, 9.000/DV,	*/
 	/* OCT 4 */
-	 0.000/DV, 0.000/DV, 3.000/DV, 4.875/DV,
+		ZERO,	ZERO,	(UINT32)(3.000/DV),	(UINT32)(4.875/DV),
+		(UINT32)(6.000/DV),	(UINT32)(7.125/DV),	(UINT32)(7.875/DV),	(UINT32)(8.625/DV),
+		(UINT32)(9.000/DV),	(UINT32)(9.750/DV),	(UINT32)(10.125/DV),	(UINT32)(10.500/DV),
+		(UINT32)(10.875/DV),	(UINT32)(11.250/DV),	(UINT32)(11.625/DV),	(UINT32)(12.000/DV),
+/*	 0.000/DV, 0.000/DV, 3.000/DV, 4.875/DV,
 	 6.000/DV, 7.125/DV, 7.875/DV, 8.625/DV,
 	 9.000/DV, 9.750/DV,10.125/DV,10.500/DV,
-	10.875/DV,11.250/DV,11.625/DV,12.000/DV,
+	10.875/DV,11.250/DV,11.625/DV,12.000/DV,	*/
 	/* OCT 5 */
-	 0.000/DV, 3.000/DV, 6.000/DV, 7.875/DV,
+		ZERO,	(UINT32)(3.000/DV),	(UINT32)(6.000/DV),	(UINT32)(7.875/DV),
+		(UINT32)(9.000/DV),	(UINT32)(10.125/DV),	(UINT32)(10.875/DV),	(UINT32)(11.625/DV),
+		(UINT32)(12.000/DV),	(UINT32)(12.750/DV),	(UINT32)(13.125/DV),	(UINT32)(13.500/DV),
+		(UINT32)(13.875/DV),	(UINT32)(14.250/DV),	(UINT32)(14.625/DV),	(UINT32)(15.000/DV),
+/*	 0.000/DV, 3.000/DV, 6.000/DV, 7.875/DV,
 	 9.000/DV,10.125/DV,10.875/DV,11.625/DV,
 	12.000/DV,12.750/DV,13.125/DV,13.500/DV,
-	13.875/DV,14.250/DV,14.625/DV,15.000/DV,
+	13.875/DV,14.250/DV,14.625/DV,15.000/DV,	*/
 	/* OCT 6 */
-	 0.000/DV, 6.000/DV, 9.000/DV,10.875/DV,
+		ZERO,	(UINT32)(6.000/DV),	(UINT32)(9.000/DV),	(UINT32)(10.875/DV),
+		(UINT32)(12.000/DV),	(UINT32)(13.125/DV),	(UINT32)(13.875/DV),	(UINT32)(14.625/DV),
+		(UINT32)(15.000/DV),	(UINT32)(15.750/DV),	(UINT32)(16.125/DV),	(UINT32)(16.500/DV),
+		(UINT32)(16.875/DV),	(UINT32)(17.250/DV),	(UINT32)(17.625/DV),	(UINT32)(18.000/DV),
+/*	 0.000/DV, 6.000/DV, 9.000/DV,10.875/DV,
 	12.000/DV,13.125/DV,13.875/DV,14.625/DV,
 	15.000/DV,15.750/DV,16.125/DV,16.500/DV,
-	16.875/DV,17.250/DV,17.625/DV,18.000/DV,
+	16.875/DV,17.250/DV,17.625/DV,18.000/DV,	*/
 	/* OCT 7 */
-	 0.000/DV, 9.000/DV,12.000/DV,13.875/DV,
+		ZERO,	(UINT32)(9.000/DV),	(UINT32)(12.000/DV),	(UINT32)(13.875/DV),
+		(UINT32)(15.000/DV),	(UINT32)(16.125/DV),	(UINT32)(16.875/DV),	(UINT32)(17.625/DV),
+		(UINT32)(18.000/DV),	(UINT32)(18.750/DV),	(UINT32)(19.125/DV),	(UINT32)(19.500/DV),
+		(UINT32)(19.875/DV),	(UINT32)(20.250/DV),	(UINT32)(20.625/DV),	(UINT32)(21.000/DV)
+/*	 0.000/DV, 9.000/DV,12.000/DV,13.875/DV,
 	15.000/DV,16.125/DV,16.875/DV,17.625/DV,
 	18.000/DV,18.750/DV,19.125/DV,19.500/DV,
-	19.875/DV,20.250/DV,20.625/DV,21.000/DV
+	19.875/DV,20.250/DV,20.625/DV,21.000/DV		*/
 };
+#undef ZERO
 #undef DV
 
 /* sustain level table (3dB per step) */
 /* 0 - 15: 0, 3, 6, 9,12,15,18,21,24,27,30,33,36,39,42,93 (dB)*/
-#define SC(db) (UINT32) ( db * (2.0/ENV_STEP) )
-static const UINT32 sl_tab[16]={
+
+#define SC(db)	(UINT32)(db * (2.0/ENV_STEP))
+static const UINT32 sl_tab[16] = {
  SC( 0),SC( 1),SC( 2),SC(3 ),SC(4 ),SC(5 ),SC(6 ),SC( 7),
  SC( 8),SC( 9),SC(10),SC(11),SC(12),SC(13),SC(14),SC(31)
 };
@@ -398,7 +433,7 @@ static const UINT32 sl_tab[16]={
 
 
 #define RATE_STEPS (8)
-static const unsigned char eg_inc[15*RATE_STEPS]={
+static const unsigned char eg_inc[15*RATE_STEPS] = {
 
 /*cycle:0 1  2 3  4 5  6 7*/
 
@@ -426,7 +461,7 @@ static const unsigned char eg_inc[15*RATE_STEPS]={
 #define O(a) (a*RATE_STEPS)
 
 /*note that there is no O(13) in this table - it's directly in the code */
-static const unsigned char eg_rate_select[16+64+16]={	/* Envelope Generator rates (16 + 64 rates + 16 RKS) */
+static const unsigned char eg_rate_select[16+64+16] = {	/* Envelope Generator rates (16 + 64 rates + 16 RKS) */
 /* 16 infinite time rates */
 O(14),O(14),O(14),O(14),O(14),O(14),O(14),O(14),
 O(14),O(14),O(14),O(14),O(14),O(14),O(14),O(14),
@@ -505,11 +540,16 @@ O( 0),O( 0),O( 0),O( 0),O( 0),O( 0),O( 0),O( 0),
 
 
 /* multiple table */
-#define ML 2
-static const UINT8 mul_tab[16]= {
+#undef	ML
+#define ML	2.0
+static const UINT8 mul_tab[16] = {
 /* 1/2, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,10,12,12,15,15 */
-   0.50*ML, 1.00*ML, 2.00*ML, 3.00*ML, 4.00*ML, 5.00*ML, 6.00*ML, 7.00*ML,
-   8.00*ML, 9.00*ML,10.00*ML,10.00*ML,12.00*ML,12.00*ML,15.00*ML,15.00*ML
+		(UINT8)(0.50*ML),	(UINT8)(1.00*ML),	(UINT8)(2.00*ML),	(UINT8)(3.00*ML),
+		(UINT8)(4.00*ML),	(UINT8)(5.00*ML),	(UINT8)(6.00*ML),	(UINT8)(7.00*ML),
+		(UINT8)(8.00*ML),	(UINT8)(9.00*ML),	(UINT8)(10.00*ML),	(UINT8)(10.00*ML),
+		(UINT8)(12.00*ML),	(UINT8)(12.00*ML),	(UINT8)(15.00*ML),	(UINT8)(15.00*ML)
+/*	0.50*ML, 1.00*ML, 2.00*ML, 3.00*ML, 4.00*ML, 5.00*ML, 6.00*ML, 7.00*ML,
+	8.00*ML, 9.00*ML,10.00*ML,10.00*ML,12.00*ML,12.00*ML,15.00*ML,15.00*ML		*/
 };
 #undef ML
 
