@@ -23,6 +23,11 @@
  *
  *****************************************************************************/
 
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#endif
+
 #undef	OP
 #define OP(nn) INLINE void m6509_##nn(m6509_Regs *cpustate)
 
@@ -349,4 +354,6 @@ static void (*const insn6509[0x100])(m6509_Regs *) = {
 	m6509_f8,m6509_f9,m6509_fa,m6509_fb,m6509_fc,m6509_fd,m6509_fe,m6509_ff
 };
 
-
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif

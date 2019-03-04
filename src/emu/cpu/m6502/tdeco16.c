@@ -3,7 +3,12 @@
  *
  *****************************************************************************/
 
-#define DECO16_VERBOSE 0
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#endif
+
+#define DECO16_VERBOSE	0
 
 #undef	OP
 #define OP(nn) INLINE void deco16_##nn(m6502_Regs *cpustate)
@@ -426,3 +431,7 @@ static void (*const insndeco16[0x100])(m6502_Regs *cpustate) = {
 	deco16_f0,deco16_f1,deco16_f2,deco16_f3,deco16_f4,deco16_f5,deco16_f6,deco16_f7,
 	deco16_f8,deco16_f9,deco16_fa,deco16_fb,deco16_fc,deco16_fd,deco16_fe,deco16_ff
 };
+
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
