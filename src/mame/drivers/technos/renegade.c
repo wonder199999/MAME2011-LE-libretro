@@ -103,32 +103,17 @@ $8000 - $ffff   ROM
 #include "emu.h"
 #include "streams.h"
 #include "deprecat.h"
+
 #include "cpu/m6502/m6502.h"
 #include "cpu/m6809/m6809.h"
 #include "cpu/m6805/m6805.h"
+
 #include "sound/3526intf.h"
 #include "sound/okim6295.h"
+
 #include "includes/renegade.h"
 
-static UINT8 bank;
-static int mcu_sim;
-
-/* MCU */
-static int from_main;
-static int from_mcu;
-static int main_sent;
-static int mcu_sent;
-static UINT8 ddr_a, ddr_b, ddr_c;
-static UINT8 port_a_out, port_b_out, port_c_out;
-static UINT8 port_a_in, port_b_in, port_c_in;
-
-/* MCU simulation (Kunio Kun) */
-#define MCU_BUFFER_MAX 6
-static UINT8 mcu_buffer[MCU_BUFFER_MAX];
-static UINT8 mcu_input_size;
-static UINT8 mcu_output_byte;
-static INT8 mcu_key;
-
+#define MCU_BUFFER_MAX	(6)
 
 /********************************************************************************************/
 
@@ -140,7 +125,8 @@ static struct renegade_adpcm_state
 	UINT8 nibble;
 	UINT8 playing;
 	UINT8 *base;
-} renegade_adpcm;
+}
+renegade_adpcm;
 
 static STREAM_UPDATE( renegade_adpcm_callback )
 {
@@ -184,25 +170,26 @@ DEVICE_GET_INFO( renegade_adpcm )
 	switch (state)
 	{
 		/* --- the following bits of info are returned as pointers to data or functions --- */
-		case DEVINFO_FCT_START:							info->start = DEVICE_START_NAME(renegade_adpcm);break;
-
+		case DEVINFO_FCT_START:
+			info->start = DEVICE_START_NAME(renegade_adpcm);
+		break;
 		/* --- the following bits of info are returned as NULL-terminated strings --- */
-		case DEVINFO_STR_NAME:							strcpy(info->s, "Renegade Custom ADPCM");		break;
-		case DEVINFO_STR_SOURCE_FILE:						strcpy(info->s, __FILE__);						break;
+		case DEVINFO_STR_NAME:
+			strcpy(info->s, "Renegade Custom ADPCM");
+		break;
+		case DEVINFO_STR_SOURCE_FILE:
+			strcpy(info->s, __FILE__);
+		break;
 	}
 }
 
 DECLARE_LEGACY_SOUND_DEVICE(RENEGADE_ADPCM, renegade_adpcm);
 DEFINE_LEGACY_SOUND_DEVICE(RENEGADE_ADPCM, renegade_adpcm);
 
-
 static WRITE8_HANDLER( adpcm_play_w )
 {
-	int offs;
-	int len;
-
-	offs = (data - 0x2c) * 0x2000;
-	len = 0x2000 * 2;
+	int offs = (data - 0x2c) * 0x2000;
+	int len = 0x2000 * 2;
 
 	/* kludge to avoid reading past end of ROM */
 	if (offs + len > 0x20000)
@@ -233,10 +220,6 @@ static WRITE8_HANDLER( sound_w )
 **  (and enemy health??)
 */
 
-static int mcu_checksum;
-static const UINT8 *mcu_encrypt_table;
-static int mcu_encrypt_table_len;
-
 static const UINT8 kuniokun_xor_table[0x2a] =
 {
 	0x48, 0x8a, 0x48, 0xa5, 0x01, 0x48, 0xa9, 0x00,
@@ -249,48 +232,15 @@ static const UINT8 kuniokun_xor_table[0x2a] =
 
 static void setbank(running_machine *machine)
 {
+	renegade_state *state = machine->driver_data<renegade_state>();
+
 	UINT8 *RAM = memory_region(machine, "maincpu");
-	memory_set_bankptr(machine, "bank1", &RAM[bank ? 0x10000 : 0x4000]);
+	memory_set_bankptr(machine, "bank1", &RAM[state->bank ? 0x10000 : 0x4000]);
 }
 
 static STATE_POSTLOAD( renegade_postload )
 {
 	setbank(machine);
-}
-
-static MACHINE_START( renegade )
-{
-	state_save_register_global_array(machine, mcu_buffer);
-	state_save_register_global(machine, mcu_input_size);
-	state_save_register_global(machine, mcu_output_byte);
-	state_save_register_global(machine, mcu_key);
-
-	state_save_register_global(machine, bank);
-	state_save_register_postload(machine, renegade_postload, NULL);
-}
-
-static DRIVER_INIT( renegade )
-{
-	mcu_sim = FALSE;
-}
-
-static DRIVER_INIT( kuniokun )
-{
-	mcu_sim = TRUE;
-	mcu_checksum = 0x85;
-	mcu_encrypt_table = kuniokun_xor_table;
-	mcu_encrypt_table_len = 0x2a;
-
-	machine->device<cpu_device>("mcu")->suspend(SUSPEND_REASON_DISABLE, 1);
-}
-
-static DRIVER_INIT( kuniokunb )
-{
-	address_space *space = cputag_get_address_space(machine, "maincpu", ADDRESS_SPACE_PROGRAM);
-
-	/* Remove the MCU handlers */
-	memory_unmap_readwrite(space, 0x3804, 0x3804, 0, 0);
-	memory_unmap_read(space, 0x3805, 0x3805, 0, 0);
 }
 
 
@@ -302,69 +252,88 @@ static DRIVER_INIT( kuniokunb )
 
 READ8_HANDLER( renegade_68705_port_a_r )
 {
-	return (port_a_out & ddr_a) | (port_a_in & ~ddr_a);
+	renegade_state *state = space->machine->driver_data<renegade_state>();
+	return (state->port_a_out & state->ddr_a) | (state->port_a_in & ~state->ddr_a);
 }
 
 WRITE8_HANDLER( renegade_68705_port_a_w )
 {
-	port_a_out = data;
+	renegade_state *state = space->machine->driver_data<renegade_state>();
+	state->port_a_out = data;
 }
 
 WRITE8_HANDLER( renegade_68705_ddr_a_w )
 {
-	ddr_a = data;
+	renegade_state *state = space->machine->driver_data<renegade_state>();
+	state->ddr_a = data;
 }
 
 READ8_HANDLER( renegade_68705_port_b_r )
 {
-	return (port_b_out & ddr_b) | (port_b_in & ~ddr_b);
+	renegade_state *state = space->machine->driver_data<renegade_state>();
+	return (state->port_b_out & state->ddr_b) | (state->port_b_in & ~state->ddr_b);
 }
 
 WRITE8_HANDLER( renegade_68705_port_b_w )
 {
-	if ((ddr_b & 0x02) && (~data & 0x02) && (port_b_out & 0x02))
+	renegade_state *state = space->machine->driver_data<renegade_state>();
+
+	if (~data & 0x02)
 	{
-		port_a_in = from_main;
+		if ((state->ddr_b & 0x02) && (state->port_b_out & 0x02))
+		{
+			state->port_a_in = state->from_main;
 
-		if (main_sent)
-			cputag_set_input_line(space->machine, "mcu", 0, CLEAR_LINE);
+			if (state->main_sent)
+				cpu_set_input_line(state->mcu, 0, CLEAR_LINE);
 
-		main_sent = 0;
+			state->main_sent = 0;
+		}
 	}
-	if ((ddr_b & 0x04) && (data & 0x04) && (~port_b_out & 0x04))
+
+	if (data & 0x04)
 	{
-		from_mcu = port_a_out;
-		mcu_sent = 1;
+		if ((state->ddr_b & 0x04) && (~state->port_b_out & 0x04))
+		{
+			state->from_mcu = state->port_a_out;
+			state->mcu_sent = 1;
+		}
 	}
 
-	port_b_out = data;
+	state->port_b_out = data;
 }
 
 WRITE8_HANDLER( renegade_68705_ddr_b_w )
 {
-	ddr_b = data;
+	renegade_state *state = space->machine->driver_data<renegade_state>();
+	state->ddr_b = data;
 }
-
 
 READ8_HANDLER( renegade_68705_port_c_r )
 {
-	port_c_in = 0;
-	if (main_sent)
-		port_c_in |= 0x01;
-	if (!mcu_sent)
-		port_c_in |= 0x02;
+	renegade_state *state = space->machine->driver_data<renegade_state>();
 
-	return (port_c_out & ddr_c) | (port_c_in & ~ddr_c);
+	state->port_c_in = 0;
+
+	if (state->main_sent)
+		state->port_c_in |= 0x01;
+
+	if (!state->mcu_sent)
+		state->port_c_in |= 0x02;
+
+	return (state->port_c_out & state->ddr_c) | (state->port_c_in & ~state->ddr_c);
 }
 
 WRITE8_HANDLER( renegade_68705_port_c_w )
 {
-	port_c_out = data;
+	renegade_state *state = space->machine->driver_data<renegade_state>();
+	state->port_c_out = data;
 }
 
 WRITE8_HANDLER( renegade_68705_ddr_c_w )
 {
-	ddr_c = data;
+	renegade_state *state = space->machine->driver_data<renegade_state>();
+	state->ddr_c = data;
 }
 
 
@@ -376,161 +345,167 @@ WRITE8_HANDLER( renegade_68705_ddr_c_w )
 
 static READ8_HANDLER( mcu_reset_r )
 {
-	if (mcu_sim == TRUE)
+	renegade_state *state = space->machine->driver_data<renegade_state>();
+
+	if (state->mcu_sim == TRUE)
 	{
-		mcu_key = -1;
-		mcu_input_size = 0;
-		mcu_output_byte = 0;
+		state->mcu_key = -1;
+		state->mcu_input_size = 0;
+		state->mcu_output_byte = 0;
 	}
 	else
-	{
-		cputag_set_input_line(space->machine, "mcu", INPUT_LINE_RESET, PULSE_LINE);
-	}
+		cpu_set_input_line(state->mcu, INPUT_LINE_RESET, PULSE_LINE);
+
 	return 0;
 }
 
 static WRITE8_HANDLER( mcu_w )
 {
-	if (mcu_sim == TRUE)
-	{
-		mcu_output_byte = 0;
+	renegade_state *state = space->machine->driver_data<renegade_state>();
 
-		if (mcu_key < 0)
+	if (state->mcu_sim == TRUE)
+	{
+		state->mcu_output_byte = 0;
+
+		if (state->mcu_key < 0)
 		{
-			mcu_key = 0;
-			mcu_input_size = 1;
-			mcu_buffer[0] = data;
+			state->mcu_key = 0;
+			state->mcu_input_size = 1;
+			state->mcu_buffer[0] = data;
 		}
 		else
 		{
-			data ^= mcu_encrypt_table[mcu_key++];
-			if (mcu_key == mcu_encrypt_table_len)
-				mcu_key = 0;
-			if (mcu_input_size < MCU_BUFFER_MAX)
-				mcu_buffer[mcu_input_size++] = data;
+			data ^= state->mcu_encrypt_table[state->mcu_key++];
+			if (state->mcu_key == state->mcu_encrypt_table_len)
+				state->mcu_key = 0;
+
+			if (state->mcu_input_size < MCU_BUFFER_MAX)
+				state->mcu_buffer[state->mcu_input_size++] = data;
 		}
 	}
 	else
 	{
-		from_main = data;
-		main_sent = 1;
-		cputag_set_input_line(space->machine, "mcu", 0, ASSERT_LINE);
+		state->from_main = data;
+		state->main_sent = 1;
+		cpu_set_input_line(state->mcu, 0, ASSERT_LINE);
 	}
 }
 
-static void mcu_process_command(void)
+static const UINT8 sound_command_table[256] = {
+	0xa0, 0xa1, 0xa2, 0x80, 0x81, 0x82, 0x83, 0x84,
+	0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c,
+	0x8d, 0x8e, 0x8f, 0x97, 0x96, 0x9b, 0x9a, 0x95,
+	0x9e, 0x98, 0x90, 0x93, 0x9d, 0x9c, 0xa3, 0x91,
+	0x9f, 0x99, 0xa6, 0xae, 0x94, 0xa5, 0xa4, 0xa7,
+	0x92, 0xab, 0xac, 0xb0, 0xb1, 0xb2, 0xb3, 0xb4,
+	0xb5, 0xb6, 0xb7, 0xb8, 0xb9, 0xba, 0xbb, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x20, 0x20,
+	0x50, 0x50, 0x90, 0x30, 0x30, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x80, 0xa0, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x40, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x20, 0x00, 0x00, 0x10, 0x10, 0x00, 0x00, 0x90,
+	0x30, 0x30, 0x30, 0xb0, 0xb0, 0xb0, 0xb0, 0xf0,
+	0xf0, 0xf0, 0xf0, 0xd0, 0xf0, 0x00, 0x00, 0x00,
+	0x00, 0x10, 0x10, 0x50, 0x30, 0xb0, 0xb0, 0xf0,
+	0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10,
+	0x10, 0x10, 0x30, 0x30, 0x20, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x0f, 0x0f, 0x0f,
+	0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f,
+	0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x8f, 0x8f, 0x0f,
+	0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f,
+	0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0xff, 0xff, 0xff,
+	0xef, 0xef, 0xcf, 0x8f, 0x8f, 0x0f, 0x0f, 0x0f
+};
+
+static void mcu_process_command(running_machine *machine)
 {
-	mcu_input_size = 0;
-	mcu_output_byte = 0;
+	renegade_state *state = machine->driver_data<renegade_state>();
 
-	switch (mcu_buffer[0])
+	state->mcu_input_size = state->mcu_output_byte = 0;
+
+	switch (state->mcu_buffer[0])
 	{
-	/* 0x0d: stop MCU when ROM check fails */
+		/* 0x0d: stop MCU when ROM check fails */
 
-	case 0x10:
-		mcu_buffer[0] = mcu_checksum;
+		case 0x10:
+			state->mcu_buffer[0] = state->mcu_checksum;
 		break;
 
-	case 0x26: /* sound code -> sound command */
+		case 0x26: /* sound code -> sound command */
 		{
-			int sound_code = mcu_buffer[1];
-			static const UINT8 sound_command_table[256] =
-			{
-				0xa0, 0xa1, 0xa2, 0x80, 0x81, 0x82, 0x83, 0x84,
-				0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c,
-				0x8d, 0x8e, 0x8f, 0x97, 0x96, 0x9b, 0x9a, 0x95,
-				0x9e, 0x98, 0x90, 0x93, 0x9d, 0x9c, 0xa3, 0x91,
-				0x9f, 0x99, 0xa6, 0xae, 0x94, 0xa5, 0xa4, 0xa7,
-				0x92, 0xab, 0xac, 0xb0, 0xb1, 0xb2, 0xb3, 0xb4,
-				0xb5, 0xb6, 0xb7, 0xb8, 0xb9, 0xba, 0xbb, 0x00,
-				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-				0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x20, 0x20,
-				0x50, 0x50, 0x90, 0x30, 0x30, 0x00, 0x00, 0x00,
-				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-				0x00, 0x00, 0x00, 0x80, 0xa0, 0x00, 0x00, 0x00,
-				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-				0x00, 0x40, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00,
-				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-				0x20, 0x00, 0x00, 0x10, 0x10, 0x00, 0x00, 0x90,
-				0x30, 0x30, 0x30, 0xb0, 0xb0, 0xb0, 0xb0, 0xf0,
-				0xf0, 0xf0, 0xf0, 0xd0, 0xf0, 0x00, 0x00, 0x00,
-				0x00, 0x10, 0x10, 0x50, 0x30, 0xb0, 0xb0, 0xf0,
-				0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0x00, 0x00, 0x00,
-				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10,
-				0x10, 0x10, 0x30, 0x30, 0x20, 0x00, 0x00, 0x00,
-				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-				0x00, 0x00, 0x00, 0x00, 0x00, 0x0f, 0x0f, 0x0f,
-				0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f,
-				0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x8f, 0x8f, 0x0f,
-				0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f,
-				0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0xff, 0xff, 0xff,
-				0xef, 0xef, 0xcf, 0x8f, 0x8f, 0x0f, 0x0f, 0x0f
-			};
-			mcu_buffer[0] = 1;
-			mcu_buffer[1] = sound_command_table[sound_code];
+			int sound_code = state->mcu_buffer[1];
+			state->mcu_buffer[0] = 1;
+			state->mcu_buffer[1] = sound_command_table[sound_code];
 		}
 		break;
 
-	case 0x33: /* joy bits -> joy dir */
+		case 0x33: /* joy bits -> joy dir */
 		{
-			int joy_bits = mcu_buffer[2];
-			static const UINT8 joy_table[0x10] =
+			int joy_bits = state->mcu_buffer[2];
+			static const UINT8 joy_table[16] =
 			{
 				0, 3, 7, 0, 1, 2, 8, 0, 5, 4, 6, 0, 0, 0, 0, 0
 			};
-			mcu_buffer[0] = 1;
-			mcu_buffer[1] = joy_table[joy_bits & 0xf];
+			state->mcu_buffer[0] = 1;
+			state->mcu_buffer[1] = joy_table[joy_bits & 0x0f];
 		}
 		break;
 
-	case 0x44: /* 0x44, 0xff, DSW2, stage# -> difficulty */
+		case 0x44: /* 0x44, 0xff, DSW2, stage# -> difficulty */
 		{
-			int difficulty = mcu_buffer[2] & 0x3;
-			int stage = mcu_buffer[3];
-			static const UINT8 difficulty_table[4] = { 5, 3, 1, 2 };
+			int difficulty = state->mcu_buffer[2] & 0x03;
+			int stage = state->mcu_buffer[3];
+			static const UINT8 difficulty_table[4] = {
+				5, 3, 1, 2
+			};
 			int result = difficulty_table[difficulty];
 
 			if (stage == 0)
 				result--;
 			result += stage / 4;
+
 			if (result > 0x21)
 				result += 0xc0;
 
-			mcu_buffer[0] = 1;
-			mcu_buffer[1] = result;
+			state->mcu_buffer[0] = 1;
+			state->mcu_buffer[1] = result;
 		}
 		break;
 
-	case 0x55: /* 0x55, 0x00, 0x00, 0x00, DSW2 -> timer */
+		case 0x55: /* 0x55, 0x00, 0x00, 0x00, DSW2 -> timer */
 		{
-			int difficulty = mcu_buffer[4] & 0x3;
-			static const UINT16 table[4] =
-			{
+			int difficulty = state->mcu_buffer[4] & 0x03;
+			static const UINT16 table[4] = {
 				0x4001, 0x5001, 0x1502, 0x0002
 			};
 
-			mcu_buffer[0] = 3;
-			mcu_buffer[2] = table[difficulty] >> 8;
-			mcu_buffer[3] = table[difficulty] & 0xff;
+			state->mcu_buffer[0] = 3;
+			state->mcu_buffer[2] = table[difficulty] >> 8;
+			state->mcu_buffer[3] = table[difficulty] & 0xff;
 		}
 		break;
 
-	case 0x41: /* 0x41, 0x00, 0x00, stage# -> ? */
+		case 0x41: /* 0x41, 0x00, 0x00, stage# -> ? */
 		{
-//          int stage = mcu_buffer[3];
-			mcu_buffer[0] = 2;
-			mcu_buffer[1] = 0x20;
-			mcu_buffer[2] = 0x78;
+			state->mcu_buffer[0] = 2;
+			state->mcu_buffer[1] = 0x20;
+			state->mcu_buffer[2] = 0x78;
 		}
 		break;
 
-	case 0x40: /* 0x40, 0x00, difficulty, enemy_type -> enemy health */
+		case 0x40: /* 0x40, 0x00, difficulty, enemy_type -> enemy health */
 		{
-			int difficulty = mcu_buffer[2];
-			int enemy_type = mcu_buffer[3];
+			int difficulty = state->mcu_buffer[2];
+			int enemy_type = state->mcu_buffer[3];
 			int health;
 
 			if (enemy_type <= 4)
@@ -546,19 +521,19 @@ static void mcu_process_command(void)
 					health = 0x20;	/* max 0x20 */
 			}
 			logerror("e_type:0x%02x diff:0x%02x -> 0x%02x\n", enemy_type, difficulty, health);
-			mcu_buffer[0] = 1;
-			mcu_buffer[1] = health;
+
+			state->mcu_buffer[0] = 1;
+			state->mcu_buffer[1] = health;
 		}
 		break;
 
-	case 0x42: /* 0x42, 0x00, stage#, character# -> enemy_type */
+		case 0x42: /* 0x42, 0x00, stage#, character# -> enemy_type */
 		{
-			int stage = mcu_buffer[2] & 0x3;
-			int indx = mcu_buffer[3];
-			int enemy_type=0;
+			int stage = state->mcu_buffer[2] & 0x3;
+			int indx = state->mcu_buffer[3];
+			int enemy_type = 0;
 
-			static const int table[] =
-			{
+			static const int table[] = {
 				0x01, 0x06, 0x06, 0x05, 0x05, 0x05, 0x05, 0x05,	/* for stage#: 0 */
 				0x02, 0x0a, 0x0a, 0x09, 0x09, 0x09, 0x09,	/* for stage#: 1 */
 				0x03, 0x0e, 0x0e, 0x0e, 0x0d, 0x0d, 0x0d, 0x0d,	/* for stage#: 2 */
@@ -572,51 +547,53 @@ static void mcu_process_command(void)
 
 			enemy_type = table[offset];
 
-			mcu_buffer[0] = 1;
-			mcu_buffer[1] = enemy_type;
+			state->mcu_buffer[0] = 1;
+			state->mcu_buffer[1] = enemy_type;
 		}
 		break;
 
-	default:
-		logerror("unknown MCU command: %02x\n", mcu_buffer[0]);
+		default:
+			logerror("unknown MCU command: %02x\n", state->mcu_buffer[0]);
 		break;
 	}
 }
 
 static READ8_HANDLER( mcu_r )
 {
-	if (mcu_sim == TRUE)
+	renegade_state *state = space->machine->driver_data<renegade_state>();
+
+	if (state->mcu_sim == TRUE)
 	{
 		int result = 1;
 
-		if (mcu_input_size)
-			mcu_process_command();
+		if (state->mcu_input_size)
+			mcu_process_command(space->machine);
 
-		if (mcu_output_byte < MCU_BUFFER_MAX)
-			result = mcu_buffer[mcu_output_byte++];
+		if (state->mcu_output_byte < MCU_BUFFER_MAX)
+			result = state->mcu_buffer[state->mcu_output_byte++];
 
 		return result;
 	}
 	else
 	{
-		mcu_sent = 0;
-		return from_mcu;
+		state->mcu_sent = 0;
+		return state->from_mcu;
 	}
 }
 
 static CUSTOM_INPUT( mcu_status_r )
 {
+	renegade_state *state = field->port->machine->driver_data<renegade_state>();
+
 	UINT8 res = 0;
 
-	if (mcu_sim == TRUE)
-	{
+	if (state->mcu_sim == TRUE)
 		res = 1;
-	}
 	else
 	{
-		if (!main_sent)
+		if (state->main_sent == 0)
 			res |= 0x01;
-		if (!mcu_sent)
+		if (state->mcu_sent == 0)
 			res |= 0x02;
 	}
 
@@ -627,29 +604,17 @@ static CUSTOM_INPUT( mcu_status_r )
 
 static WRITE8_HANDLER( bankswitch_w )
 {
-	if ((data & 1) != bank)
+	renegade_state *state = space->machine->driver_data<renegade_state>();
+
+	if ((data & 0x01) != state->bank)
 	{
-		bank = data & 1;
+		state->bank = data & 0x01;
 		setbank(space->machine);
 	}
 }
 
 static INTERRUPT_GEN( renegade_interrupt )
 {
-/*
-    static int coin;
-    int port = input_port_read(machine, "IN1") & 0xc0;
-    if (port != 0xc0)
-    {
-        if (coin == 0)
-        {
-            coin = 1;
-            return irq0_line_hold();
-        }
-    }
-    else coin = 0;
-*/
-
 	if (cpu_getiloops(device))
 		cpu_set_input_line(device, INPUT_LINE_NMI, PULSE_LINE);
 	else
@@ -658,41 +623,49 @@ static INTERRUPT_GEN( renegade_interrupt )
 
 static WRITE8_HANDLER( renegade_coin_counter_w )
 {
-	//coin_counter_w(offset, data);
 }
 
 
-/********************************************************************************************/
+/*************************************
+ *	Main CPU memory maps
+ *************************************/
 
 static ADDRESS_MAP_START( renegade_map, ADDRESS_SPACE_PROGRAM, 8 )
 	AM_RANGE(0x0000, 0x17ff) AM_RAM
-	AM_RANGE(0x1800, 0x1fff) AM_RAM_WRITE(renegade_videoram2_w) AM_BASE(&renegade_videoram2)
+	AM_RANGE(0x1800, 0x1fff) AM_RAM_WRITE(fg_videoram_w) AM_BASE_MEMBER(renegade_state, fg_videoram)
 	AM_RANGE(0x2000, 0x27ff) AM_RAM AM_BASE_GENERIC(spriteram)
-	AM_RANGE(0x2800, 0x2fff) AM_RAM_WRITE(renegade_videoram_w) AM_BASE_MEMBER(renegade_state, videoram)
+	AM_RANGE(0x2800, 0x2fff) AM_RAM_WRITE(bg_videoram_w) AM_BASE_MEMBER(renegade_state, bg_videoram)
 	AM_RANGE(0x3000, 0x30ff) AM_RAM_WRITE(paletteram_xxxxBBBBGGGGRRRR_split1_w) AM_BASE_GENERIC(paletteram)
 	AM_RANGE(0x3100, 0x31ff) AM_RAM_WRITE(paletteram_xxxxBBBBGGGGRRRR_split2_w) AM_BASE_GENERIC(paletteram2)
-	AM_RANGE(0x3800, 0x3800) AM_READ_PORT("IN0") AM_WRITE(renegade_scroll0_w)		/* Player#1 controls, P1,P2 start */
-	AM_RANGE(0x3801, 0x3801) AM_READ_PORT("IN1") AM_WRITE(renegade_scroll1_w)		/* Player#2 controls, coin triggers */
-	AM_RANGE(0x3802, 0x3802) AM_READ_PORT("DSW2") AM_WRITE(sound_w)	/* DIP2  various IO ports */
+	AM_RANGE(0x3800, 0x3800) AM_READ_PORT("IN0") AM_WRITE(scroll_lsb_w)	/* Player#1 controls, P1,P2 start */
+	AM_RANGE(0x3801, 0x3801) AM_READ_PORT("IN1") AM_WRITE(scroll_msb_w)	/* Player#2 controls, coin triggers */
+	AM_RANGE(0x3802, 0x3802) AM_READ_PORT("DSW2") AM_WRITE(sound_w)			/* DIP2  various IO ports */
 	AM_RANGE(0x3803, 0x3803) AM_READ_PORT("DSW1") AM_WRITE(renegade_flipscreen_w)	/* DIP1 */
 	AM_RANGE(0x3804, 0x3804) AM_READWRITE(mcu_r, mcu_w)
 	AM_RANGE(0x3805, 0x3805) AM_READWRITE(mcu_reset_r, bankswitch_w)
-	AM_RANGE(0x3806, 0x3806) AM_WRITENOP // ?? watchdog
+	AM_RANGE(0x3806, 0x3806) AM_WRITENOP						// ?? watchdog
 	AM_RANGE(0x3807, 0x3807) AM_WRITE(renegade_coin_counter_w)
 	AM_RANGE(0x4000, 0x7fff) AM_ROMBANK("bank1")
 	AM_RANGE(0x8000, 0xffff) AM_ROM
 ADDRESS_MAP_END
 
+/*************************************
+ *	Sound CPU memory maps
+ *************************************/
+
 static ADDRESS_MAP_START( renegade_sound_map, ADDRESS_SPACE_PROGRAM, 8 )
 	AM_RANGE(0x0000, 0x0fff) AM_RAM
 	AM_RANGE(0x1000, 0x1000) AM_READ(soundlatch_r)
-	AM_RANGE(0x1800, 0x1800) AM_WRITENOP // this gets written the same values as 0x2000
+	AM_RANGE(0x1800, 0x1800) AM_WRITENOP					// this gets written the same values as 0x2000
 	AM_RANGE(0x2000, 0x2000) AM_WRITE(adpcm_play_w)
-	AM_RANGE(0x2800, 0x2801) AM_DEVREADWRITE("ymsnd", ym3526_r,ym3526_w)
-	AM_RANGE(0x3000, 0x3000) AM_WRITENOP /* adpcm related? stereo pan? */
+	AM_RANGE(0x2800, 0x2801) AM_DEVREADWRITE("ymsnd", ym3526_r, ym3526_w)
+	AM_RANGE(0x3000, 0x3000) AM_WRITENOP					/* adpcm related? stereo pan? */
 	AM_RANGE(0x8000, 0xffff) AM_ROM
 ADDRESS_MAP_END
 
+/*************************************
+ *	 MCU memory maps
+ *************************************/
 static ADDRESS_MAP_START( renegade_mcu_map, ADDRESS_SPACE_PROGRAM, 8 )
 	ADDRESS_MAP_GLOBAL_MASK(0x7ff)
 	AM_RANGE(0x0000, 0x0000) AM_READWRITE(renegade_68705_port_a_r, renegade_68705_port_a_w)
@@ -701,12 +674,13 @@ static ADDRESS_MAP_START( renegade_mcu_map, ADDRESS_SPACE_PROGRAM, 8 )
 	AM_RANGE(0x0004, 0x0004) AM_WRITE(renegade_68705_ddr_a_w)
 	AM_RANGE(0x0005, 0x0005) AM_WRITE(renegade_68705_ddr_b_w)
 	AM_RANGE(0x0006, 0x0006) AM_WRITE(renegade_68705_ddr_c_w)
-//  AM_RANGE(0x0008, 0x0008) AM_READWRITE(m68705_tdr_r, m68705_tdr_w)
-//  AM_RANGE(0x0009, 0x0009) AM_READWRITE(m68705_tcr_r, m68705_tcr_w)
 	AM_RANGE(0x0010, 0x007f) AM_RAM
 	AM_RANGE(0x0080, 0x07ff) AM_ROM
 ADDRESS_MAP_END
 
+/*************************************
+ *	Input ports
+ *************************************/
 
 static INPUT_PORTS_START( renegade )
 	PORT_START("IN0")	/* IN0 */
@@ -768,101 +742,79 @@ static INPUT_PORTS_START( renegade )
 INPUT_PORTS_END
 
 
+/*************************************
+ *	Graphics layouts
+ *************************************/
 
-static const gfx_layout charlayout =
-{
-	8,8, /* 8x8 characters */
-	1024, /* 1024 characters */
-	3, /* bits per pixel */
-	{ 2, 4, 6 },	/* plane offsets; bit 0 is always clear */
-	{ 1, 0, 65, 64, 129, 128, 193, 192 }, /* x offsets */
-	{ 0*8, 1*8, 2*8, 3*8, 4*8, 5*8, 6*8, 7*8 }, /* y offsets */
-	32*8 /* offset to next character */
+static const gfx_layout charlayout = {
+	8,8,					/* 8x8 characters */
+	1024,					/* 1024 characters */
+	3,					/* bits per pixel */
+	{ 2, 4, 6 },				/* plane offsets; bit 0 is always clear */
+	{ 1, 0, 65, 64, 129, 128, 193, 192 },	/* x offsets */
+	{ STEP8(0,8) },				/* y offsets */
+	32*8					/* offset to next character */
 };
 
-static const gfx_layout tileslayout1 =
-{
-	16,16, /* tile size */
-	256, /* number of tiles */
-	3, /* bits per pixel */
-
+static const gfx_layout tileslayout1 = {
+	16,16,					/* tile size */
+	256,					/* number of tiles */
+	3,					/* bits per pixel */
 	/* plane offsets */
 	{ 4, 0x8000*8+0, 0x8000*8+4 },
-
 	/* x offsets */
 	{ 3, 2, 1, 0, 16*8+3, 16*8+2, 16*8+1, 16*8+0,
 		32*8+3,32*8+2 ,32*8+1 ,32*8+0 ,48*8+3 ,48*8+2 ,48*8+1 ,48*8+0 },
-
 	/* y offsets */
-	{ 0*8, 1*8, 2*8, 3*8, 4*8, 5*8, 6*8, 7*8,
-		8*8, 9*8, 10*8, 11*8, 12*8, 13*8, 14*8, 15*8 },
-
-	64*8 /* offset to next tile */
+	{ STEP16(0,8) },
+	64*8					/* offset to next tile */
 };
 
-static const gfx_layout tileslayout2 =
-{
-	16,16, /* tile size */
-	256, /* number of tiles */
-	3, /* bits per pixel */
-
+static const gfx_layout tileslayout2 = {
+	16,16,					/* tile size */
+	256,					/* number of tiles */
+	3,					/* bits per pixel */
 	/* plane offsets */
 	{ 0, 0xC000*8+0, 0xC000*8+4 },
-
 	/* x offsets */
 	{ 3, 2, 1, 0, 16*8+3, 16*8+2, 16*8+1, 16*8+0,
 		32*8+3,32*8+2 ,32*8+1 ,32*8+0 ,48*8+3 ,48*8+2 ,48*8+1 ,48*8+0 },
-
 	/* y offsets */
-	{ 0*8, 1*8, 2*8, 3*8, 4*8, 5*8, 6*8, 7*8,
-		8*8, 9*8, 10*8, 11*8, 12*8, 13*8, 14*8, 15*8 },
-
-	64*8 /* offset to next tile */
+	{ STEP16(0,8) },
+	64*8					/* offset to next tile */
 };
 
-static const gfx_layout tileslayout3 =
-{
-	16,16, /* tile size */
-	256, /* number of tiles */
-	3, /* bits per pixel */
-
+static const gfx_layout tileslayout3 = {
+	16,16,					/* tile size */
+	256,					/* number of tiles */
+	3,					/* bits per pixel */
 	/* plane offsets */
 	{ 0x4000*8+4, 0x10000*8+0, 0x10000*8+4 },
-
 	/* x offsets */
 	{ 3, 2, 1, 0, 16*8+3, 16*8+2, 16*8+1, 16*8+0,
 		32*8+3,32*8+2 ,32*8+1 ,32*8+0 ,48*8+3 ,48*8+2 ,48*8+1 ,48*8+0 },
-
 	/* y offsets */
-	{ 0*8, 1*8, 2*8, 3*8, 4*8, 5*8, 6*8, 7*8,
-		8*8, 9*8, 10*8, 11*8, 12*8, 13*8, 14*8, 15*8 },
-
-	64*8 /* offset to next tile */
+	{ STEP16(0,8) },
+	64*8					/* offset to next tile */
 };
 
-static const gfx_layout tileslayout4 =
-{
-	16,16, /* tile size */
-	256, /* number of tiles */
-	3, /* bits per pixel */
-
+static const gfx_layout tileslayout4 = {
+	16,16,					/* tile size */
+	256,					/* number of tiles */
+	3,					/* bits per pixel */
 	/* plane offsets */
 	{ 0x4000*8+0, 0x14000*8+0, 0x14000*8+4 },
-
 	/* x offsets */
 	{ 3, 2, 1, 0, 16*8+3, 16*8+2, 16*8+1, 16*8+0,
 		32*8+3,32*8+2 ,32*8+1 ,32*8+0 ,48*8+3 ,48*8+2 ,48*8+1 ,48*8+0 },
-
 	/* y offsets */
-	{ 0*8, 1*8, 2*8, 3*8, 4*8, 5*8, 6*8, 7*8,
-		8*8, 9*8, 10*8, 11*8, 12*8, 13*8, 14*8, 15*8 },
-
-	64*8 /* offset to next tile */
+	{ STEP16(0,8) },
+	64*8					/* offset to next tile */
 };
 
 static GFXDECODE_START( renegade )
 	/* 8x8 text, 8 colors */
-	GFXDECODE_ENTRY( "chars", 0x00000, charlayout,	 0, 4 )	/* colors   0- 32 */
+	GFXDECODE_ENTRY( "chars", 0x00000, charlayout,	 0, 4 )		/* colors   0- 32 */
 
 	/* 16x16 background tiles, 8 colors */
 	GFXDECODE_ENTRY( "tiles", 0x00000, tileslayout1, 192, 8 )	/* colors 192-255 */
@@ -899,6 +851,10 @@ GFXDECODE_END
 
 
 
+/*************************************
+ *	Sound definitions
+ *************************************/
+
 /* handler called by the 3526 emulator when the internal timers cause an IRQ */
 static void irqhandler(running_device *device, int linestate)
 {
@@ -910,53 +866,90 @@ static const ym3526_interface ym3526_config =
 	irqhandler
 };
 
+static MACHINE_START( renegade )
+{
+	renegade_state *state = machine->driver_data<renegade_state>();
+
+	state->maincpu = machine->device("maincpu");
+	state->audiocpu = machine->device("audiocpu");
+	state->mcu = machine->device("mcu");
+
+	if (state->mcu != NULL)		/* kuniokunb has no mcu */
+	{
+		state_save_register_global_array(machine, state->mcu_buffer);
+		state_save_register_global(machine, state->mcu_input_size);
+		state_save_register_global(machine, state->mcu_output_byte);
+		state_save_register_global(machine, state->mcu_key);
+	}
+
+	state_save_register_global(machine, state->bank);
+	state_save_register_postload(machine, renegade_postload, NULL);
+}
 
 static MACHINE_RESET( renegade )
 {
-	bank = 0;
+	renegade_state *state = machine->driver_data<renegade_state>();
+
+	state->scrollx = 0;
+
+	state->from_main = 
+	state->from_mcu = 
+	state->main_sent = 
+	state->mcu_sent = 0;
+
+	state->ddr_a = 
+	state->ddr_b = 
+	state->ddr_c = 0;
+
+	state->port_a_out = 
+	state->port_b_out = 
+	state->port_c_out = 0;
+
+	state->port_a_in = 
+	state->port_b_in = 
+	state->port_c_in = 0;
+
+	state->bank = 0;
 	setbank(machine);
 }
 
+
+/*************************************
+ *	Machine drivers
+ *************************************/
 
 static MACHINE_DRIVER_START( renegade )
 	/* driver data */
 	MDRV_DRIVER_DATA(renegade_state)
 
 	/* basic machine hardware */
-	MDRV_CPU_ADD("maincpu", M6502, 12000000/8)	/* 1.5 MHz (measured) */
+	MDRV_CPU_ADD("maincpu", M6502, 12000000/8)		/* 1.5 MHz (measured) */
 	MDRV_CPU_PROGRAM_MAP(renegade_map)
 	MDRV_CPU_VBLANK_INT_HACK(renegade_interrupt,2)
-
 	MDRV_CPU_ADD("audiocpu", M6809, 12000000/8)
-	MDRV_CPU_PROGRAM_MAP(renegade_sound_map)	/* IRQs are caused by the main CPU */
-
-	MDRV_CPU_ADD("mcu", M68705, 12000000/4) // ?
+	MDRV_CPU_PROGRAM_MAP(renegade_sound_map)		/* IRQs are caused by the main CPU */
+	MDRV_CPU_ADD("mcu", M68705, 12000000/4)			// ?
 	MDRV_CPU_PROGRAM_MAP(renegade_mcu_map)
-
 	MDRV_MACHINE_START(renegade)
 	MDRV_MACHINE_RESET(renegade)
 
 	/* video hardware */
 	MDRV_SCREEN_ADD("screen", RASTER)
 	MDRV_SCREEN_REFRESH_RATE(60)
-	MDRV_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500)*2)  /* not accurate */
-    MDRV_SCREEN_FORMAT(BITMAP_FORMAT_INDEXED16)
-    MDRV_SCREEN_SIZE(32*8, 32*8)
-    MDRV_SCREEN_VISIBLE_AREA(1*8, 31*8-1, 0, 30*8-1)
+	MDRV_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(2500)*2)	/* not accurate */
+	MDRV_SCREEN_FORMAT(BITMAP_FORMAT_INDEXED16)
+	MDRV_SCREEN_SIZE(32*8, 32*8)
+	MDRV_SCREEN_VISIBLE_AREA(1*8, 31*8-1, 0, 30*8-1)
+	MDRV_GFXDECODE(renegade)
+	MDRV_PALETTE_LENGTH(0x100)
+	MDRV_VIDEO_START(renegade)
+	MDRV_VIDEO_UPDATE(renegade)
 
-    MDRV_GFXDECODE(renegade)
-    MDRV_PALETTE_LENGTH(256)
-
-    MDRV_VIDEO_START(renegade)
-    MDRV_VIDEO_UPDATE(renegade)
-
-    /* sound hardware */
+	/* sound hardware */
 	MDRV_SPEAKER_STANDARD_MONO("mono")
-
 	MDRV_SOUND_ADD("ymsnd", YM3526, 12000000/4)
 	MDRV_SOUND_CONFIG(ym3526_config)
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
-
 	MDRV_SOUND_ADD("adpcm", RENEGADE_ADPCM, 8000)
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_DRIVER_END
@@ -967,6 +960,9 @@ static MACHINE_DRIVER_START( kuniokunb )
 	MDRV_DEVICE_REMOVE("mcu")
 MACHINE_DRIVER_END
 
+/*************************************
+ *	ROM definitions
+ *************************************/
 
 ROM_START( renegade )
 	ROM_REGION( 0x14000, "maincpu", 0 )	/* 64k for code + bank switched ROM */
@@ -1094,6 +1090,40 @@ ROM_START( kuniokunb )
 	ROM_LOAD( "ta18-09.bin",  0x18000, 0x8000, CRC(07ed4705) SHA1(6fd4b78ca846fa602504f06f3105b2da03bcd00c) )
 ROM_END
 
+/********************************************
+ *	Driver-specific initialization
+ ********************************************/
+
+static DRIVER_INIT( renegade )
+{
+	renegade_state *state = machine->driver_data<renegade_state>();
+	state->mcu_sim = FALSE;
+}
+
+static DRIVER_INIT( kuniokun )
+{
+	renegade_state *state = machine->driver_data<renegade_state>();
+
+	state->mcu_sim = TRUE;
+	state->mcu_checksum = 0x85;
+	state->mcu_encrypt_table = kuniokun_xor_table;
+	state->mcu_encrypt_table_len = 0x2a;
+
+	machine->device<cpu_device>("mcu")->suspend(SUSPEND_REASON_DISABLE, 1);
+}
+
+static DRIVER_INIT( kuniokunb )
+{
+	address_space *space = cputag_get_address_space(machine, "maincpu", ADDRESS_SPACE_PROGRAM);
+
+	/* Remove the MCU handlers */
+	memory_unmap_readwrite(space, 0x3804, 0x3804, 0, 0);
+	memory_unmap_read(space, 0x3805, 0x3805, 0, 0);
+}
+
+/*************************************
+ *	Game drivers
+ *************************************/
 
 GAME( 1986, renegade,  0,        renegade,  renegade, renegade,  ROT0, "Technos Japan (Taito America license)", "Renegade (US)", 0 )
 GAME( 1986, kuniokun,  renegade, renegade,  renegade, kuniokun,  ROT0, "Technos Japan", "Nekketsu Kouha Kunio-kun (Japan)", 0 )
