@@ -69,6 +69,16 @@ WRITE8_HANDLER( renegade_flipscreen_w );
 
 /*----------- defined in driver/renegade.c -----------*/
 
+struct _renegade_arrays
+{
+	const UINT8 kuniokun_xor_table[42];
+	const UINT8 sound_command_table[256];
+	const UINT8 joy_table[16];
+	const UINT8 difficulty_table[4];
+	const UINT16 timer_table[4];
+	const UINT8 enemy_type_table[39];
+};
+
 WRITE8_HANDLER( renegade_68705_port_a_w );
 WRITE8_HANDLER( renegade_68705_port_b_w );
 WRITE8_HANDLER( renegade_68705_port_c_w );

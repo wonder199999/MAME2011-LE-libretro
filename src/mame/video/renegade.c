@@ -12,9 +12,7 @@ WRITE8_HANDLER( bg_videoram_w )
 	renegade_state *state = space->machine->driver_data<renegade_state>();
 
 	state->bg_videoram[offset] = data;
-	offset &= 0x03ff;
-
-	tilemap_mark_tile_dirty(state->bg_tilemap, offset);
+	tilemap_mark_tile_dirty(state->bg_tilemap, offset & 0x03ff);
 }
 
 WRITE8_HANDLER( fg_videoram_w )
@@ -22,9 +20,7 @@ WRITE8_HANDLER( fg_videoram_w )
 	renegade_state *state = space->machine->driver_data<renegade_state>();
 
 	state->fg_videoram[offset] = data;
-	offset &= 0x03ff;
-
-	tilemap_mark_tile_dirty(state->fg_tilemap, offset);
+	tilemap_mark_tile_dirty(state->fg_tilemap, offset & 0x03ff);
 }
 
 WRITE8_HANDLER( renegade_flipscreen_w )
@@ -61,7 +57,7 @@ static TILE_GET_INFO( get_fg_tilemap_info )
 
 	const UINT8 *source = &state->fg_videoram[tile_index];
 	UINT8 attributes = source[0x0400];
-	SET_TILE_INFO( 0, (attributes & 0x03) * 256 + source[0], attributes >> 6, 0 );
+	SET_TILE_INFO( 0, (attributes & 0x03) << 8 | source[0], attributes >> 6, 0 );
 }
 
 VIDEO_START( renegade )
@@ -111,9 +107,8 @@ static void draw_sprites(running_machine *machine, bitmap_t *bitmap, const recta
 
 			if (attributes & 0x80)		/* big sprite */
 			{
-				sprite_number &= ~1;
 				drawgfx_transpen(bitmap, cliprect, machine->gfx[sprite_bank],
-					sprite_number + 1, color, xflip,
+					sprite_number | 0x01, color, xflip,
 					flip_screen_set,
 					sx, sy + (flip_screen_set ? -16 : 16), 0);
 			}
