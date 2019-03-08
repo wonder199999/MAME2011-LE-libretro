@@ -102,7 +102,9 @@ $8000 - $ffff   ROM
 
 #include "emu.h"
 #include "streams.h"
+#if defined(ARM_ENABLED)
 #include "deprecat.h"
+#endif
 
 #include "cpu/m6502/m6502.h"
 #include "cpu/m6809/m6809.h"
@@ -119,12 +121,13 @@ $8000 - $ffff   ROM
 
 static struct renegade_adpcm_state
 {
-	adpcm_state adpcm;
-	sound_stream *stream;
-	UINT32 current, end;
-	UINT8 nibble;
-	UINT8 playing;
-	UINT8 *base;
+	adpcm_state	adpcm;
+	sound_stream	*stream;
+	UINT32		current;
+	UINT32		end;
+	UINT8		nibble;
+	UINT8		playing;
+	UINT8		*base;
 }
 renegade_adpcm;
 
@@ -135,7 +138,7 @@ static STREAM_UPDATE( renegade_adpcm_callback )
 
 	while (state->playing && samples > 0)
 	{
-		int val = (state->base[state->current] >> state->nibble) & 15;
+		int val = (state->base[state->current] >> state->nibble) & 0x0f;
 
 		state->nibble ^= 4;
 		if (state->nibble == 4)
@@ -195,10 +198,10 @@ static WRITE8_HANDLER( adpcm_play_w )
 	if (offs + len > 0x20000)
 		len = 0x1000;
 
-	if (offs >= 0 && offs+len <= 0x20000)
+	if (offs >= 0 && offs + len <= 0x20000)
 	{
 		renegade_adpcm.current = offs;
-		renegade_adpcm.end = offs + len/2;
+		renegade_adpcm.end = offs + len / 2;
 		renegade_adpcm.nibble = 4;
 		renegade_adpcm.playing = 1;
 	}
@@ -317,13 +320,8 @@ WRITE8_HANDLER( renegade_68705_ddr_c_w )
 
 static struct _renegade_arrays	ary =
 {
-	/* kuniokun_xor_table */
-	{ 0x48, 0x8a, 0x48, 0xa5, 0x01, 0x48, 0xa9, 0x00,
-	  0x85, 0x01, 0xa2, 0x10, 0x26, 0x10, 0x26, 0x11,
-	  0x26, 0x01, 0xa5, 0x01, 0xc5, 0x00, 0x90, 0x04,
-	  0xe5, 0x00, 0x85, 0x01, 0x26, 0x10, 0x26, 0x11,
-	  0xca, 0xd0, 0xed, 0x68, 0x85, 0x01, 0x68, 0xaa,
-	  0x68, 0x60 },
+	/* timer_table */
+	{ 0x4001, 0x5001, 0x1502, 0x0002 },
 	/* sound_command_table */
 	{ 0xa0, 0xa1, 0xa2, 0x80, 0x81, 0x82, 0x83, 0x84,
 	  0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c,
@@ -357,12 +355,17 @@ static struct _renegade_arrays	ary =
 	  0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f,
 	  0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0xff, 0xff, 0xff,
 	  0xef, 0xef, 0xcf, 0x8f, 0x8f, 0x0f, 0x0f, 0x0f },
-	/* joy_table */
-	{ 0, 3, 7, 0, 1, 2, 8, 0, 5, 4, 6, 0, 0, 0, 0, 0 },
 	/* difficulty_table */
 	{ 5, 3, 1, 2 },
-	/* timer_table */
-	{ 0x4001, 0x5001, 0x1502, 0x0002 },
+	/* joy_table */
+	{ 0, 3, 7, 0, 1, 2, 8, 0, 5, 4, 6, 0, 0, 0, 0, 0 },
+	/* kuniokun_xor_table */
+	{ 0x48, 0x8a, 0x48, 0xa5, 0x01, 0x48, 0xa9, 0x00,
+	  0x85, 0x01, 0xa2, 0x10, 0x26, 0x10, 0x26, 0x11,
+	  0x26, 0x01, 0xa5, 0x01, 0xc5, 0x00, 0x90, 0x04,
+	  0xe5, 0x00, 0x85, 0x01, 0x26, 0x10, 0x26, 0x11,
+	  0xca, 0xd0, 0xed, 0x68, 0x85, 0x01, 0x68, 0xaa,
+	  0x68, 0x60 },
 	/* enemy_type_table */
 	{ 0x01, 0x06, 0x06, 0x05, 0x05, 0x05, 0x05, 0x05,	/* for stage#: 0 */
 	  0x02, 0x0a, 0x0a, 0x09, 0x09, 0x09, 0x09,		/* for stage#: 1 */
@@ -436,7 +439,7 @@ static void mcu_process_command(running_machine *machine)
 		/* sound code -> sound command */
 		case 0x26:
 		{
-			int sound_code = state->mcu_buffer[1];
+			UINT8 sound_code = state->mcu_buffer[1];
 			state->mcu_buffer[0] = 1;
 			state->mcu_buffer[1] = ary.sound_command_table[sound_code];
 		}
@@ -444,7 +447,7 @@ static void mcu_process_command(running_machine *machine)
 		/* joy bits -> joy dir */
 		case 0x33:
 		{
-			int joy_bits = state->mcu_buffer[2];
+			UINT8 joy_bits = state->mcu_buffer[2];
 			state->mcu_buffer[0] = 1;
 			state->mcu_buffer[1] = ary.joy_table[joy_bits & 0x0f];
 		}
@@ -452,8 +455,8 @@ static void mcu_process_command(running_machine *machine)
 		/* 0x40, 0x00, difficulty, enemy_type -> enemy health */
 		case 0x40:
 		{
-			int difficulty = state->mcu_buffer[2];
-			int enemy_type = state->mcu_buffer[3];
+			UINT8 difficulty = state->mcu_buffer[2];
+			UINT8 enemy_type = state->mcu_buffer[3];
 			int health;
 
 			if (enemy_type <= 4)
@@ -471,7 +474,7 @@ static void mcu_process_command(running_machine *machine)
 			logerror("e_type:0x%02x diff:0x%02x -> 0x%02x\n", enemy_type, difficulty, health);
 
 			state->mcu_buffer[0] = 1;
-			state->mcu_buffer[1] = health;
+			state->mcu_buffer[1] = (UINT8)health;
 		}
 		break;
 		/* 0x41, 0x00, 0x00, stage# -> ? */
@@ -485,8 +488,8 @@ static void mcu_process_command(running_machine *machine)
 		/* 0x42, 0x00, stage#, character# -> enemy_type */
 		case 0x42:
 		{
-			int stage = state->mcu_buffer[2] & 0x03;
-			int indx = state->mcu_buffer[3];
+			UINT8 stage = state->mcu_buffer[2] & 0x03;
+			UINT8 indx = state->mcu_buffer[3];
 			UINT8 enemy_type = 0;
 
 			int offset = stage * 8 + indx;
@@ -503,9 +506,9 @@ static void mcu_process_command(running_machine *machine)
 		/* 0x44, 0xff, DSW2, stage# -> difficulty */
 		case 0x44:
 		{
-			int difficulty = state->mcu_buffer[2] & 0x03;
-			int stage = state->mcu_buffer[3];
-			int result = ary.difficulty_table[difficulty];
+			UINT8 difficulty = state->mcu_buffer[2] & 0x03;
+			UINT8 stage = state->mcu_buffer[3];
+			UINT8 result = ary.difficulty_table[difficulty];
 
 			if (stage == 0)
 				result--;
@@ -521,7 +524,7 @@ static void mcu_process_command(running_machine *machine)
 		/* 0x55, 0x00, 0x00, 0x00, DSW2 -> timer */
 		case 0x55:
 		{
-			int difficulty = state->mcu_buffer[4] & 0x03;
+			UINT8 difficulty = state->mcu_buffer[4] & 0x03;
 			state->mcu_buffer[0] = 3;
 			state->mcu_buffer[2] = ary.timer_table[difficulty] >> 8;
 			state->mcu_buffer[3] = ary.timer_table[difficulty] & 0xff;
@@ -603,6 +606,7 @@ static WRITE8_HANDLER( bankswitch_w )
 	}
 }
 
+#if defined(ARM_ENABLED)
 static INTERRUPT_GEN( renegade_interrupt )
 {
 	if (cpu_getiloops(device))
@@ -610,6 +614,19 @@ static INTERRUPT_GEN( renegade_interrupt )
 	else
 		cpu_set_input_line(device, 0, HOLD_LINE);
 }
+#else
+static TIMER_DEVICE_CALLBACK( renegade_scanline_interrupt )
+{
+	renegade_state *state = timer.machine->driver_data<renegade_state>();
+
+	int scanline = param;
+
+	if (scanline == 112)
+		cpu_set_input_line(state->maincpu, INPUT_LINE_NMI, PULSE_LINE);
+	else if (scanline == 240)
+		cpu_set_input_line(state->maincpu, 0, HOLD_LINE);
+}
+#endif
 
 static WRITE8_HANDLER( renegade_coin_counter_w )
 {
@@ -915,7 +932,11 @@ static MACHINE_DRIVER_START( renegade )
 	/* basic machine hardware */
 	MDRV_CPU_ADD("maincpu", M6502, 12000000/8)		/* 1.5 MHz (measured) */
 	MDRV_CPU_PROGRAM_MAP(renegade_map)
-	MDRV_CPU_VBLANK_INT_HACK(renegade_interrupt,2)
+#if defined(ARM_ENABLED)
+	MDRV_CPU_VBLANK_INT_HACK(renegade_interrupt, 2)
+#else
+	MDRV_TIMER_ADD_SCANLINE("scantimer", renegade_scanline_interrupt, "screen", 0, 1)
+#endif
 	MDRV_CPU_ADD("audiocpu", M6809, 12000000/8)
 	MDRV_CPU_PROGRAM_MAP(renegade_sound_map)		/* IRQs are caused by the main CPU */
 	MDRV_CPU_ADD("mcu", M68705, 12000000/4)			// ?
