@@ -138,7 +138,9 @@ Updates by Bryan McPhail, 12/12/2004:
 ***************************************************************************/
 
 #include "emu.h"
+#if defined(ARM_ENABLED)
 #include "deprecat.h"
+#endif
 
 #include "cpu/m6809/m6809.h"
 #include "cpu/m6805/m6805.h"
