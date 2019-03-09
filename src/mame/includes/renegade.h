@@ -16,6 +16,7 @@ public:
 	running_device	*maincpu;
 	running_device	*audiocpu;
 	running_device	*mcu;
+	running_device	*msm5205;
 
 	/* memory pointers */
 	UINT8		*bg_videoram;
@@ -52,7 +53,12 @@ public:
 	INT32		mcu_sim;
 	INT32		mcu_checksum;
 	INT32		mcu_encrypt_table_len;
-	UINT8		bank;
+
+	/* adpcm */
+	UINT8		*adpcm_rom;
+	UINT32		adpcm_pos;
+	UINT32		adpcm_end;
+	UINT8		adpcm_playing;
 };
 
 
