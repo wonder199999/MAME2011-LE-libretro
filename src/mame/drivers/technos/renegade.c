@@ -116,14 +116,15 @@ $8000 - $ffff   ROM
 #include "includes/renegade.h"
 
 #define MCU_BUFFER_MAX	(6)
+#define MAIN_CLOCK	XTAL_12MHz
 
-/************************************************************************/
-/*		ADPCM sound						*/
+/*********************************************************************
+		ADPCM sound
 
-/*	Inferred from the 6809 code and analogy with ddragon
+*	Inferred from the 6809 code and analogy with ddragon
 *	NMI at end of sample is not needed in order for
 *	playback to work, but seems to be what the code expects
-*/
+*********************************************************************/
 
 static WRITE8_HANDLER( adpcm_start_w )
 {
@@ -834,6 +835,11 @@ static const msm5205_interface msm5205_config = {
 	adpcm_init, MSM5205_S48_4B
 };
 
+
+/****************************************
+ *	System setup and intialization
+ ****************************************/
+
 static MACHINE_START( renegade )
 {
 	renegade_state *state = machine->driver_data<renegade_state>();
@@ -849,13 +855,6 @@ static MACHINE_START( renegade )
 	state_save_register_global(machine, state->adpcm_pos);
 	state_save_register_global(machine, state->adpcm_end);
 	state_save_register_global(machine, state->adpcm_playing);
-	if (state->mcu != NULL)		/* kuniokunb has no mcu */
-	{
-		state_save_register_global_array(machine, state->mcu_buffer);
-		state_save_register_global(machine, state->mcu_input_size);
-		state_save_register_global(machine, state->mcu_output_byte);
-		state_save_register_global(machine, state->mcu_key);
-	}
 }
 
 static MACHINE_RESET( renegade )
@@ -864,28 +863,22 @@ static MACHINE_RESET( renegade )
 
 	state->scrollx = 0;
 
-	state->from_main = 
-	state->from_mcu = 
-	state->main_sent = 
-	state->mcu_sent = 0;
+	state->from_main = state->from_mcu = 
+	state->main_sent = state->mcu_sent = 0;
 
-	state->ddr_a = 
-	state->ddr_b = 
+	state->ddr_a = state->ddr_b = 
 	state->ddr_c = 0;
 
-	state->port_a_out = 
-	state->port_b_out = 
+	state->port_a_out = state->port_b_out = 
 	state->port_c_out = 0;
 
-	state->port_a_in = 
-	state->port_b_in = 
+	state->port_a_in = state->port_b_in = 
 	state->port_c_in = 0;
 
 	msm5205_reset_w(state->msm5205, 1);
 	state->adpcm_playing = 0;
 	memory_set_bank(machine, "rombank", 0);
 }
-
 
 /*************************************
  *	Machine drivers
@@ -896,16 +889,17 @@ static MACHINE_DRIVER_START( renegade )
 	MDRV_DRIVER_DATA(renegade_state)
 
 	/* basic machine hardware */
-	MDRV_CPU_ADD("maincpu", M6502, 12000000/8)		/* 1.5 MHz (measured) */
+	MDRV_CPU_ADD("maincpu", M6502, MAIN_CLOCK/8)		/* 1.5 MHz (measured) */
 	MDRV_CPU_PROGRAM_MAP(renegade_map)
 #if defined(ARM_ENABLED)
 	MDRV_CPU_VBLANK_INT_HACK(renegade_interrupt, 2)
+	MDRV_CPU_ADD("audiocpu", M6809, MAIN_CLOCK/8)
 #else
 	MDRV_TIMER_ADD_SCANLINE("scantimer", renegade_scanline_interrupt, "screen", 0, 1)
+	MDRV_CPU_ADD("audiocpu", M6809, MAIN_CLOCK/2)
 #endif
-	MDRV_CPU_ADD("audiocpu", M6809, 12000000/8)
 	MDRV_CPU_PROGRAM_MAP(renegade_sound_map)		/* IRQs are caused by the main CPU */
-	MDRV_CPU_ADD("mcu", M68705, 12000000/4)			// ?
+	MDRV_CPU_ADD("mcu", M68705, MAIN_CLOCK/4)		// ?
 	MDRV_CPU_PROGRAM_MAP(renegade_mcu_map)
 	MDRV_MACHINE_START(renegade)
 	MDRV_MACHINE_RESET(renegade)
@@ -924,10 +918,10 @@ static MACHINE_DRIVER_START( renegade )
 
 	/* sound hardware */
 	MDRV_SPEAKER_STANDARD_MONO("mono")
-	MDRV_SOUND_ADD("ymsnd", YM3526, 12000000/4)
+	MDRV_SOUND_ADD("ymsnd", YM3526, MAIN_CLOCK/4)
 	MDRV_SOUND_CONFIG(ym3526_config)
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
-	MDRV_SOUND_ADD("msm", MSM5205, 12000000/32)
+	MDRV_SOUND_ADD("msm", MSM5205, MAIN_CLOCK/32)
 	MDRV_SOUND_CONFIG(msm5205_config)
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
 MACHINE_DRIVER_END
@@ -1073,6 +1067,21 @@ static DRIVER_INIT( renegade )
 {
 	renegade_state *state = machine->driver_data<renegade_state>();
 	state->mcu_sim = FALSE;
+
+	/* register for save states */
+	state_save_register_global(machine, state->from_main);
+	state_save_register_global(machine, state->from_mcu);
+	state_save_register_global(machine, state->main_sent);
+	state_save_register_global(machine, state->mcu_sent);
+	state_save_register_global(machine, state->ddr_a);
+	state_save_register_global(machine, state->ddr_b);
+	state_save_register_global(machine, state->ddr_c);
+	state_save_register_global(machine, state->port_a_out);
+	state_save_register_global(machine, state->port_b_out);
+	state_save_register_global(machine, state->port_c_out);
+	state_save_register_global(machine, state->port_a_in);
+	state_save_register_global(machine, state->port_b_in);
+	state_save_register_global(machine, state->port_c_in);
 }
 
 static DRIVER_INIT( kuniokun )
@@ -1085,6 +1094,12 @@ static DRIVER_INIT( kuniokun )
 	state->mcu_encrypt_table_len = 0x2a;
 
 	machine->device<cpu_device>("mcu")->suspend(SUSPEND_REASON_DISABLE, 1);
+
+	/* register for save states */
+	state_save_register_global_array(machine, state->mcu_buffer);
+	state_save_register_global(machine, state->mcu_input_size);
+	state_save_register_global(machine, state->mcu_output_byte);
+	state_save_register_global(machine, state->mcu_key);
 }
 
 static DRIVER_INIT( kuniokunb )
@@ -1100,6 +1115,6 @@ static DRIVER_INIT( kuniokunb )
  *	Game drivers
  *************************************/
 
-GAME( 1986, renegade,  0,        renegade,  renegade, renegade,  ROT0, "Technos Japan (Taito America license)", "Renegade (US)", 0 )
-GAME( 1986, kuniokun,  renegade, renegade,  renegade, kuniokun,  ROT0, "Technos Japan", "Nekketsu Kouha Kunio-kun (Japan)", 0 )
-GAME( 1986, kuniokunb, renegade, kuniokunb, renegade, kuniokunb, ROT0, "bootleg", "Nekketsu Kouha Kunio-kun (Japan bootleg)", 0 )
+GAME( 1986, renegade,  0,        renegade,  renegade, renegade,  ROT0, "Technos Japan (Taito America license)", "Renegade (US)", GAME_SUPPORTS_SAVE )
+GAME( 1986, kuniokun,  renegade, renegade,  renegade, kuniokun,  ROT0, "Technos Japan", "Nekketsu Kouha Kunio-kun (Japan)", GAME_SUPPORTS_SAVE )
+GAME( 1986, kuniokunb, renegade, kuniokunb, renegade, kuniokunb, ROT0, "bootleg", "Nekketsu Kouha Kunio-kun (Japan bootleg)", GAME_SUPPORTS_SAVE )
