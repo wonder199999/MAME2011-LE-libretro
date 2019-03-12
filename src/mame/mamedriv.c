@@ -1144,4 +1144,10 @@ const game_driver *const drivers[] =
 	DRIVER( kuniokun )
 	DRIVER( kuniokunb )
 
+	DRIVER( blockout )
+	DRIVER( blockout2 )
+	DRIVER( blockoutj )
+	DRIVER( agress )
+	DRIVER( agressb )
+
 #endif	/* DRIVER_RECURSIVE */
