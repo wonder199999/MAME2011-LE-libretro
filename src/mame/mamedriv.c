@@ -1150,4 +1150,8 @@ const game_driver *const drivers[] =
 	DRIVER( agress )
 	DRIVER( agressb )
 
+	DRIVER( mystston )
+	DRIVER( myststono )
+	DRIVER( myststonoi )
+
 #endif	/* DRIVER_RECURSIVE */

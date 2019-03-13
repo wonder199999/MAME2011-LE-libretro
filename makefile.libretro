@@ -126,6 +126,7 @@ $(MAMEOBJ)/technos.a: \
 	$(DRIVERS)/technos/shadfrce.o $(VIDEO)/shadfrce.o \
 	$(DRIVERS)/technos/renegade.o $(VIDEO)/renegade.o \
 	$(DRIVERS)/technos/blockout.o $(VIDEO)/blockout.o \
+	$(DRIVERS)/technos/mystston.o $(VIDEO)/mystston.o \
 
 $(DRIVERS)/neogeo.o:	$(MAMESRC)/drivers/neogeo/neogeo.inc
 
