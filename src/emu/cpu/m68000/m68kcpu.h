@@ -85,6 +85,7 @@ typedef struct _m68ki_cpu_core m68ki_cpu_core;
 #define CPU_TYPE_EC040  (0x00000080)
 #define CPU_TYPE_LC040  (0x00000100)
 #define CPU_TYPE_040    (0x00000200)
+#define CPU_TYPE_SCC070 (0x00000400)
 
 /* Different ways to stop the CPU */
 #define STOP_LEVEL_STOP 1
@@ -533,6 +534,7 @@ union _fp_reg
 };
 
 /* Redirect memory calls */
+#if defined(ARM_ENABLED)
 
 typedef struct _m68k_memory_interface m68k_memory_interface;
 struct _m68k_memory_interface
@@ -546,6 +548,62 @@ struct _m68k_memory_interface
 	void	(*write16)(address_space *, offs_t, UINT16);		// Write 16 bit
 	void	(*write32)(address_space *, offs_t, UINT32);		// Write 32 bit
 };
+#else
+typedef proto_delegate_1param<UINT8, offs_t> m68k_read8_proto_delegate;
+typedef proto_delegate_1param<UINT16, offs_t> m68k_readimm16_proto_delegate;
+typedef proto_delegate_2param<UINT16, offs_t, UINT16> m68k_read16_proto_delegate;
+typedef proto_delegate_2param<UINT32, offs_t, UINT32> m68k_read32_proto_delegate;
+typedef proto_delegate_2param<void, offs_t, UINT8> m68k_write8_proto_delegate;
+typedef proto_delegate_3param<void, offs_t, UINT16, UINT16> m68k_write16_proto_delegate;
+typedef proto_delegate_3param<void, offs_t, UINT32, UINT32> m68k_write32_proto_delegate;
+
+typedef delegate_1param<UINT8, offs_t> m68k_read8_delegate;
+typedef delegate_1param<UINT16, offs_t> m68k_readimm16_delegate;
+typedef delegate_2param<UINT16, offs_t, UINT16> m68k_read16_delegate;
+typedef delegate_2param<UINT32, offs_t, UINT32> m68k_read32_delegate;
+typedef delegate_2param<void, offs_t, UINT8> m68k_write8_delegate;
+typedef delegate_3param<void, offs_t, UINT16, UINT16> m68k_write16_delegate;
+typedef delegate_3param<void, offs_t, UINT32, UINT32> m68k_write32_delegate;
+
+class m68k_memory_interface : public bindable_object
+{
+public:
+	void init8(address_space &space);
+	void init16(address_space &space);
+	void init32(address_space &space);
+	void init32mmu(address_space &space);
+
+	offs_t	opcode_xor;						// Address Calculation
+	m68k_readimm16_delegate readimm16;		// Immediate read 16 bit
+	m68k_read8_delegate read8;
+	m68k_read16_delegate read16;
+	m68k_read32_delegate read32;
+	m68k_write8_delegate write8;
+	m68k_write16_delegate write16;
+	m68k_write32_delegate write32;
+
+private:
+	UINT16 m68008_read_immediate_16(offs_t address);
+	UINT16 read_immediate_16(offs_t address);
+	UINT16 simple_read_immediate_16(offs_t address);
+	UINT16 readword_d32(offs_t address, UINT16 mask);
+	void writeword_d32(offs_t address, UINT16 data, UINT16 mask);
+	UINT32 readlong_d32(offs_t address, UINT32 mask);
+	void writelong_d32(offs_t address, UINT32 data, UINT32 mask);
+
+	UINT8 read_byte_32_mmu(offs_t address);
+	void write_byte_32_mmu(offs_t address, UINT8 data);
+	UINT16 read_immediate_16_mmu(offs_t address);
+	UINT16 readword_d32_mmu(offs_t address, UINT16 mask);
+	void writeword_d32_mmu(offs_t address, UINT16 data, UINT16 mask);
+	UINT32 readlong_d32_mmu(offs_t address, UINT32 mask);
+	void writelong_d32_mmu(offs_t address, UINT32 data, UINT32 mask);
+
+	address_space *m_space;
+	direct_read_data *m_direct;
+	m68ki_cpu_core *m_cpustate;
+};
+#endif
 
 struct _m68ki_cpu_core
 {
@@ -775,7 +833,7 @@ char* m68ki_disassemble_quick(unsigned int pc, unsigned int cpu_type);
 /* =========================== UTILITY FUNCTIONS ========================== */
 /* ======================================================================== */
 
-
+#if defined(ARM_ENABLED)
 INLINE unsigned int m68k_read_immediate_32(m68ki_cpu_core *m68k, unsigned int address)
 {
 	return ((*m68k->memory.readimm16)(m68k->program, address) << 16) | (*m68k->memory.readimm16)(m68k->program, address + 2);
@@ -931,7 +989,163 @@ INLINE void m68ki_write_32_pd_fc(m68ki_cpu_core *m68k, UINT32 address, UINT32 fc
 	(*m68k->memory.write16)(m68k->program, address+2, value>>16);
 	(*m68k->memory.write16)(m68k->program, address, value&0xffff);
 }
+#else
+INLINE unsigned int m68k_read_immediate_32(m68ki_cpu_core *m68k, unsigned int address)
+{
+	return (m68k->memory.readimm16(address) << 16) | m68k->memory.readimm16(address + 2);
+}
 
+INLINE unsigned int m68k_read_pcrelative_8(m68ki_cpu_core *m68k, unsigned int address)
+{
+	if (address >= m68k->encrypted_start && address < m68k->encrypted_end)
+		return ((m68k->memory.readimm16(address&~1)>>(8*(1-(address & 1))))&0xff);
+
+	return m68k->memory.read8(address);
+}
+
+INLINE unsigned int m68k_read_pcrelative_16(m68ki_cpu_core *m68k, unsigned int address)
+{
+	if (address >= m68k->encrypted_start && address < m68k->encrypted_end)
+		return m68k->memory.readimm16(address);
+
+	return m68k->memory.read16(address, 0xffff);
+}
+
+INLINE unsigned int m68k_read_pcrelative_32(m68ki_cpu_core *m68k, unsigned int address)
+{
+	if (address >= m68k->encrypted_start && address < m68k->encrypted_end)
+		return m68k_read_immediate_32(m68k, address);
+
+	return m68k->memory.read32(address, 0xffffffff);
+}
+
+
+/* Special call to simulate undocumented 68k behavior when move.l with a
+ * predecrement destination mode is executed.
+ * A real 68k first writes the high word to [address+2], and then writes the
+ * low word to [address].
+ */
+INLINE void m68kx_write_memory_32_pd(m68ki_cpu_core *m68k, unsigned int address, unsigned int value)
+{
+	m68k->memory.write16(address+2, value>>16, 0xffff);
+	m68k->memory.write16(address, value&0xffff, 0xffff);
+}
+
+
+/* ---------------------------- Read Immediate ---------------------------- */
+
+/* Handles all immediate reads, does address error check, function code setting,
+ * and prefetching if they are enabled in m68kconf.h
+ */
+INLINE UINT32 m68ki_read_imm_16(m68ki_cpu_core *m68k)
+{
+	UINT32 result;
+
+	m68ki_check_address_error(m68k, REG_PC, MODE_READ, m68k->s_flag | FUNCTION_CODE_USER_PROGRAM); /* auto-disable (see m68kcpu.h) */
+
+	if(REG_PC != m68k->pref_addr)
+	{
+		m68k->pref_addr = REG_PC;
+		m68k->pref_data = m68k->memory.readimm16(m68k->pref_addr);
+	}
+	result = MASK_OUT_ABOVE_16(m68k->pref_data);
+	REG_PC += 2;
+	m68k->pref_addr = REG_PC;
+	m68k->pref_data = m68k->memory.readimm16(m68k->pref_addr);
+	return result;
+}
+
+INLINE UINT32 m68ki_read_imm_32(m68ki_cpu_core *m68k)
+{
+	UINT32 temp_val;
+
+	m68ki_check_address_error(m68k, REG_PC, MODE_READ, m68k->s_flag | FUNCTION_CODE_USER_PROGRAM); /* auto-disable (see m68kcpu.h) */
+
+	if(REG_PC != m68k->pref_addr)
+	{
+		m68k->pref_addr = REG_PC;
+		m68k->pref_data = m68k->memory.readimm16(m68k->pref_addr);
+	}
+	temp_val = MASK_OUT_ABOVE_16(m68k->pref_data);
+	REG_PC += 2;
+	m68k->pref_addr = REG_PC;
+	m68k->pref_data = m68k->memory.readimm16(m68k->pref_addr);
+
+	temp_val = MASK_OUT_ABOVE_32((temp_val << 16) | MASK_OUT_ABOVE_16(m68k->pref_data));
+	REG_PC += 2;
+	m68k->pref_addr = REG_PC;
+	m68k->pref_data = m68k->memory.readimm16(m68k->pref_addr);
+
+	return temp_val;
+}
+
+
+
+/* ------------------------- Top level read/write ------------------------- */
+
+/* Handles all memory accesses (except for immediate reads if they are
+ * configured to use separate functions in m68kconf.h).
+ * All memory accesses must go through these top level functions.
+ * These functions will also check for address error and set the function
+ * code if they are enabled in m68kconf.h.
+ */
+INLINE UINT32 m68ki_read_8_fc(m68ki_cpu_core *m68k, UINT32 address, UINT32 fc)
+{
+	return m68k->memory.read8(address);
+}
+INLINE UINT32 m68ki_read_16_fc(m68ki_cpu_core *m68k, UINT32 address, UINT32 fc)
+{
+	if (CPU_TYPE_IS_010_LESS(m68k->cpu_type))
+	{
+		m68ki_check_address_error(m68k, address, MODE_READ, fc);
+	}
+	return m68k->memory.read16(address, 0xffff);
+}
+INLINE UINT32 m68ki_read_32_fc(m68ki_cpu_core *m68k, UINT32 address, UINT32 fc)
+{
+	if (CPU_TYPE_IS_010_LESS(m68k->cpu_type))
+	{
+		m68ki_check_address_error(m68k, address, MODE_READ, fc);
+	}
+	return m68k->memory.read32(address, 0xffffffff);
+}
+
+INLINE void m68ki_write_8_fc(m68ki_cpu_core *m68k, UINT32 address, UINT32 fc, UINT32 value)
+{
+	m68k->memory.write8(address, value);
+}
+INLINE void m68ki_write_16_fc(m68ki_cpu_core *m68k, UINT32 address, UINT32 fc, UINT32 value)
+{
+	if (CPU_TYPE_IS_010_LESS(m68k->cpu_type))
+	{
+		m68ki_check_address_error(m68k, address, MODE_WRITE, fc);
+	}
+	m68k->memory.write16(address, value, 0xffff);
+}
+INLINE void m68ki_write_32_fc(m68ki_cpu_core *m68k, UINT32 address, UINT32 fc, UINT32 value)
+{
+	if (CPU_TYPE_IS_010_LESS(m68k->cpu_type))
+	{
+		m68ki_check_address_error(m68k, address, MODE_WRITE, fc);
+	}
+	m68k->memory.write32(address, value, 0xffffffff);
+}
+
+/* Special call to simulate undocumented 68k behavior when move.l with a
+ * predecrement destination mode is executed.
+ * A real 68k first writes the high word to [address+2], and then writes the
+ * low word to [address].
+ */
+INLINE void m68ki_write_32_pd_fc(m68ki_cpu_core *m68k, UINT32 address, UINT32 fc, UINT32 value)
+{
+	if (CPU_TYPE_IS_010_LESS(m68k->cpu_type))
+	{
+		m68ki_check_address_error(m68k, address, MODE_WRITE, fc);
+	}
+	m68k->memory.write16(address+2, value>>16, 0xffff);
+	m68k->memory.write16(address, value&0xffff, 0xffff);
+}
+#endif
 
 /* --------------------- Effective Address Calculation -------------------- */
 
@@ -1681,7 +1895,11 @@ INLINE void m68ki_exception_address_error(m68ki_cpu_core *m68k)
      */
 	if(m68k->run_mode == RUN_MODE_BERR_AERR_RESET)
 	{
+#if defined(ARM_ENABLED)
 		(*m68k->memory.read8)(m68k->program, 0x00ffff01);
+#else
+		m68k->memory.read8(0x00ffff01);
+#endif
 		m68k->stopped = STOP_LEVEL_HALT;
 		return;
 	}
