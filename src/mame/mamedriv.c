@@ -1154,4 +1154,106 @@ const game_driver *const drivers[] =
 	DRIVER( myststono )
 	DRIVER( myststonoi )
 
+	/*****************/
+	/*	IGS	 */
+	/*****************/
+	DRIVER( pgm )			// System BIOS driver
+
+	DRIVER( orlegend )
+	DRIVER( orlegende )
+	DRIVER( orlegendc )
+	DRIVER( orlegendca )
+	DRIVER( orlegend111c )
+	DRIVER( orlegend105k )
+
+	DRIVER( drgw2 )
+	DRIVER( dw2v100x )
+	DRIVER( drgw2j )
+	DRIVER( drgw2c )
+
+	DRIVER( photoy2k )
+	DRIVER( photoy2k104 )
+	DRIVER( photoy2k102 )
+
+	DRIVER( kovsh )
+	DRIVER( kovsh103 )
+	DRIVER( kovqhsgs )
+
+	DRIVER( kov2 )
+	DRIVER( kov2106 )
+	DRIVER( kov2103 )
+	DRIVER( kov2102 )
+	DRIVER( kov2100 )
+
+	DRIVER( martmast )
+	DRIVER( martmastc )
+	DRIVER( martmastc102 )
+
+	DRIVER( killbld )
+	DRIVER( killbld104 )
+
+	DRIVER( olds )
+	DRIVER( olds100 )
+	DRIVER( olds100a )
+
+	DRIVER( drgw3 )
+	DRIVER( drgw3105 )
+	DRIVER( drgw3100 )
+
+	DRIVER( dwex )
+
+	DRIVER( kov )
+	DRIVER( kov115 )
+	DRIVER( kov100 )
+
+	DRIVER( kovplus )
+	DRIVER( kovplusa )
+
+	DRIVER( puzlstar )
+
+	DRIVER( py2k2 )
+
+	DRIVER( kov2p )
+	DRIVER( kov2p205 )
+
+	DRIVER( ddp2 )
+	DRIVER( ddp2101 )
+	DRIVER( ddp2100 )
+
+	DRIVER( dw2001 )
+
+	DRIVER( puzzli2 )
+
+	DRIVER( dmnfrnt )
+	DRIVER( dmnfrnta )
+
+	DRIVER( theglad )
+	DRIVER( theglada )
+
+	DRIVER( oldsplus )
+
+	DRIVER( kovshp )
+	DRIVER( kovlsqh2 )
+	DRIVER( kovlsjb )
+	DRIVER( kovlsjba )
+
+	DRIVER( killbldp )
+
+	DRIVER( happy6 )
+
+	DRIVER( svg )
+
+	DRIVER( ddp3 )
+	DRIVER( ddp3a )
+	DRIVER( ddp3b )
+	DRIVER( ddp3blk )
+
+	DRIVER( ket )
+	DRIVER( keta )
+	DRIVER( ketb )
+
+	DRIVER( espgal )
+
+	DRIVER( orleg2 )
+
 #endif	/* DRIVER_RECURSIVE */

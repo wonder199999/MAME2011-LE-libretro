@@ -46,6 +46,7 @@ OBJDIRS += \
 	$(DRIVERS)/irem			\
 	$(DRIVERS)/neogeo		\
 	$(DRIVERS)/technos		\
+	$(DRIVERS)/igs			\
 	$(MACHINE) \
 	$(VIDEO) \
 
@@ -55,6 +56,7 @@ OBJDIRS += \
 # updated with any MAME core changes
 #-------------------------------------------------
 
+CPUS += ARM7
 CPUS += HD6309
 CPUS += M6502
 CPUS += M680X0
@@ -71,6 +73,7 @@ CPUS += Z80
 #-------------------------------------------------
 
 SOUNDS += DAC
+SOUNDS += ICS2115
 SOUNDS += IREMGA20
 SOUNDS += MSM5205
 SOUNDS += OKIM6295
@@ -96,6 +99,7 @@ DRVLIBS = \
 	$(MAMEOBJ)/neogeo.a \
 	\
 	$(MAMEOBJ)/technos.a \
+	$(MAMEOBJ)/igs.a \
 
 #-------------------------------------------------
 # the following files are general components and
@@ -127,6 +131,10 @@ $(MAMEOBJ)/technos.a: \
 	$(DRIVERS)/technos/renegade.o $(VIDEO)/renegade.o \
 	$(DRIVERS)/technos/blockout.o $(VIDEO)/blockout.o \
 	$(DRIVERS)/technos/mystston.o $(VIDEO)/mystston.o \
+
+$(MAMEOBJ)/igs.a: \
+	$(DRIVERS)/igs/pgm.o $(VIDEO)/pgm.o \
+	$(MACHINE)/pgmcrypt.o $(MACHINE)/pgmprot.o \
 
 $(DRIVERS)/neogeo.o:	$(MAMESRC)/drivers/neogeo/neogeo.inc
 
@@ -267,6 +275,21 @@ CPUOBJ = $(EMUOBJ)/cpu
 
 OBJDIRS += $(CPUOBJ)
 CPUOBJS += $(CPUOBJ)/vtlb.o
+
+#-------------------------------------------------
+# Acorn ARM series
+#-------------------------------------------------
+
+ifneq ($(filter ARM7,$(CPUS)),)
+OBJDIRS += $(CPUOBJ)/arm7
+CPUOBJS += $(CPUOBJ)/arm7/arm7.o
+DASMOBJS += $(CPUOBJ)/arm7/arm7dasm.o
+endif
+
+$(CPUOBJ)/arm7/arm7.o:	$(CPUSRC)/arm7/arm7.c \
+				$(CPUSRC)/arm7/arm7.h \
+					$(CPUSRC)/arm7/arm7exec.c \
+						$(CPUSRC)/arm7/arm7core.c
 
 #-------------------------------------------------
 # Intel MCS-48 (8039 and derivatives)
@@ -493,6 +516,14 @@ endif
 
 ifneq ($(filter QSOUND,$(SOUNDS)),)
 SOUNDOBJS += $(SOUNDOBJ)/qsound.o
+endif
+
+#-------------------------------------------------
+# ICS2115 sound chip
+#-------------------------------------------------
+
+ifneq ($(filter ICS2115,$(SOUNDS)),)
+SOUNDOBJS += $(SOUNDOBJ)/ics2115.o
 endif
 
 #-------------------------------------------------
