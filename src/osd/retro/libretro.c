@@ -197,9 +197,9 @@ bool allow_select_newgame = false;
 bool RETRO_LOOP = true;
 
 #ifdef _WIN32
-	char slash = '\\';
+	static char slash = '\\';
 #else
-	char slash = '/';
+	static char slash = '/';
 #endif
 
 // input device
@@ -228,6 +228,7 @@ static bool retro_load_ok = false;
 static bool keyboard_input = true;
 static bool macro_enable = true;
 static bool is_neogeo = false;
+static bool do_cheat = true;	// TODO: add core option
 
 static INT32 rtwi = 320, rthe = 240, topw = 320;	/* DEFAULT TEXW/TEXH/PITCH */
 static INT32 ui_ipt_pushchar = -1;
@@ -320,7 +321,7 @@ static void retro_poll_mame_input(void);
 	UINT16 videoBuffer[512 * 512];
 	#define PITCH 1
 #else
-	UINT32 videoBuffer[512 * 512];
+	UINT32 videoBuffer[1024 * 1024];
 	#define PITCH 1 * 2
 #endif
 
@@ -334,76 +335,24 @@ static retro_input_state_t input_state_cb = NULL;
 static retro_audio_sample_batch_t audio_batch_cb = NULL;
 static retro_input_poll_t input_poll_cb = NULL;
 
-unsigned retro_get_region(void)
-{
-	return RETRO_REGION_NTSC;
-}
+unsigned int retro_get_region(void) { return RETRO_REGION_NTSC; }
+size_t retro_serialize_size(void) { return 0; }
+size_t retro_get_memory_size(unsigned type) { return 0; }
+bool retro_serialize(void *data, size_t size) { return false; }
+bool retro_unserialize(const void *data, size_t size) { return false; }
+bool retro_load_game_special(unsigned game_type, const struct retro_game_info *info, size_t num_info) { return false; }
+void *retro_get_memory_data(unsigned type) { return 0; }
 
-size_t retro_serialize_size(void)
-{
-	return 0;
-}
+void retro_cheat_reset(void) { }
+void retro_cheat_set(unsigned unused, bool unused1, const char *unused2) { }
+void retro_set_controller_port_device(unsigned in_port, unsigned device) { }
+void retro_set_audio_sample(retro_audio_sample_t cb) { }
 
-size_t retro_get_memory_size(unsigned type)
-{
-	return 0;
-}
+void retro_set_audio_sample_batch(retro_audio_sample_batch_t cb) { audio_batch_cb = cb; }
+void retro_set_input_state(retro_input_state_t cb) { input_state_cb = cb; }
+void retro_set_input_poll(retro_input_poll_t cb) { input_poll_cb = cb; }
+void retro_set_video_refresh(retro_video_refresh_t cb) { video_cb = cb; }
 
-bool retro_serialize(void *data, size_t size)
-{
-	return false;
-}
-
-bool retro_unserialize(const void *data, size_t size)
-{
-	return false;
-}
-
-bool retro_load_game_special(unsigned game_type, const struct retro_game_info *info, size_t num_info)
-{
-	return false;
-}
-
-void *retro_get_memory_data(unsigned type)
-{
-	return 0;
-}
-
-void retro_cheat_reset(void)
-{
-}
-
-void retro_cheat_set(unsigned unused, bool unused1, const char *unused2)
-{
-}
-
-void retro_set_controller_port_device(unsigned in_port, unsigned device)
-{
-}
-
-void retro_set_audio_sample_batch(retro_audio_sample_batch_t cb)
-{
-	audio_batch_cb = cb;
-}
-
-void retro_set_input_state(retro_input_state_t cb)
-{
-	input_state_cb = cb;
-}
-
-void retro_set_input_poll(retro_input_poll_t cb)
-{
-	input_poll_cb = cb;
-}
-
-void retro_set_audio_sample(retro_audio_sample_t cb)
-{
-}
-
-void retro_set_video_refresh(retro_video_refresh_t cb)
-{
-	video_cb = cb;
-}
 
 static void extract_basename(char *buf, const char *path, size_t size)
 {
@@ -441,9 +390,6 @@ static void extract_directory(char *buf, const char *path, size_t size)
 		buf[0] = '\0';
 }
 
-#if defined(HAVE_OPENGL) || defined(HAVE_OPENGLES)
-	#include "retroogl.c"
-#endif
 
 /**************************************************************************/
 
@@ -718,7 +664,12 @@ static void init_input_descriptors(void)
 void retro_get_system_info(struct retro_system_info *info)
 {
 	memset(info, 0, sizeof(*info));
+
+#if defined(HAVE_OPENGL) || defined(HAVE_OPENGLES)
+	info->library_name = "M.B.A more(HW)";
+#else
 	info->library_name = "M.B.A more";
+#endif
 #ifndef GIT_VERSION
 	#define GIT_VERSION "<test version>"
 #endif
@@ -736,8 +687,8 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
 	info->geometry.base_width   = width;
 	info->geometry.base_height  = height;
 
-	info->geometry.max_width    = width * 2;
-	info->geometry.max_height   = height * 2;
+	info->geometry.max_width    = 1024;
+	info->geometry.max_height   = 768;
 
 	float display_ratio = set_par ? (vertical && !tate) ? (float)height / (float)width : (float)width / (float)height : (vertical && !tate) ? 3.0f / 4.0f : 4.0f / 3.0f;
 	info->geometry.aspect_ratio = display_ratio;
@@ -765,9 +716,7 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
 #endif
 }
 
-void retro_init (void)
-{
-}
+void retro_init (void) { }
 
 void retro_deinit(void)
 {
@@ -781,6 +730,10 @@ void retro_reset (void)
 {
 	mame_reset = 1;
 }
+
+#if defined(HAVE_OPENGL) || defined(HAVE_OPENGLES)
+	#include "retroogl.c"
+#endif
 
 void retro_run (void)
 {
@@ -807,7 +760,6 @@ void retro_run (void)
 
 void prep_retro_rotation(int rot)
 {
-/*	LOGI("Rotation:%d\n", rot);	*/
 	environ_cb(RETRO_ENVIRONMENT_SET_ROTATION, &rot);
 }
 
@@ -828,7 +780,7 @@ bool retro_load_game(const struct retro_game_info *info)
 #ifdef M16B
 	memset(videoBuffer, 0, 512 * 512 * 2);
 #else
-	memset(videoBuffer, 0, 512 * 512 * 2 * 2);
+	memset(videoBuffer, 0, 1024 * 1024 * 2 * 2);
 #endif
 	check_variables();
 
@@ -855,7 +807,7 @@ bool retro_load_game(const struct retro_game_info *info)
 
 	if (result != 1)
 	{
-		printf("Error: mame return an error\n");
+		LOGI("Error: mame return an error\n");
 		return 0;
 	}
 
@@ -1226,7 +1178,7 @@ void osd_update(running_machine *machine, int skip_redraw)
 	if (FirstTimeUpdate)
 		skip_redraw = 0;		/* force redraw to make sure the video texture is created */
 
-	if (!skip_redraw)
+	if (skip_redraw == 0)
 	{
 		draw_this_frame = true;
 		INT32 minwidth, minheight;
@@ -1441,22 +1393,24 @@ static int getGameInfo(char *gameName, int *rotation, int *driverIndex)
 static int executeGame(char *path)
 {
 	/* cli_frontend does the heavy lifting; if we have osd-specific options, we create a derivative of cli_options and add our own */
-	int result = 0;
-	int gameRot = 0;
-	int paramCount;
-	int driverIndex;
+	int result = 0, gameRot = 0;
+	int paramCount, driverIndex;
+
+	const char *sysdir;
+	char retro_system_dir[1024];
+	unsigned char exist_dir = 0;
 
 	const char *xargv[] = {
 		"-joystick", "-sound", "-rompath",
 		NULL, NULL, NULL, NULL,
 		NULL, NULL, NULL, NULL,
 		NULL, NULL, NULL, NULL,
-		NULL, NULL
+		NULL, NULL, NULL, NULL
 	};
 
 	FirstTimeUpdate = 1;
 
-	// Split the path to directory and the name without the zip extension
+	// split the path to directory and the name without the zip extension
 	result = parsePath(path, MAME_GAME_PATH, MAME_GAME_NAME);
 
 	if (result == 0)
@@ -1477,40 +1431,52 @@ static int executeGame(char *path)
 		screenRot = 1;
 		if (gameRot & ORIENTATION_FLIP_X)
 		{
-			LOGI("*********** flip X\n");
+			LOGI("*********** flip X \n");
 			screenRot = 2;
 		}
 	}
 
+	if (environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &sysdir) && sysdir)
+	{
+		snprintf(retro_system_dir, sizeof(retro_system_dir), "%s", sysdir);
+#ifdef _WIN32
+		strcat(retro_system_dir, "\\mba-cheat");
+#else
+		strcat(retro_system_dir, "/mba-cheat");
+#endif
+		exist_dir = 1;
+		LOGI("SYSTEM Directory: %s\n", retro_system_dir);
+	}
+
 /*	LOGI("creating frontend...\n");	*/
 
-	// Find how many parameters we have
+	//find how many parameters we have
 	for (paramCount = 0; xargv[paramCount] != NULL; paramCount++) ;
 
-	xargv[paramCount++] = (char*)retro_content_dir;
+	xargv[paramCount++] = (char *)retro_content_dir;
 
-	xargv[paramCount++] = (char*)"-cfg_directory";
-	xargv[paramCount++] = (char*)retro_content_dir;
+	xargv[paramCount++] = (char *)"-cfg_directory";
+	xargv[paramCount++] = (char *)retro_content_dir;
 
-	xargv[paramCount++] = (char*)"-nvram_directory";
-	xargv[paramCount++] = (char*)retro_content_dir;
+	xargv[paramCount++] = (char *)"-nvram_directory";
+	xargv[paramCount++] = (char *)retro_content_dir;
 
-	xargv[paramCount++] = (char*)"-memcard_directory";
-	xargv[paramCount++] = (char*)retro_content_dir;
+	xargv[paramCount++] = (char *)"-memcard_directory";
+	xargv[paramCount++] = (char *)retro_content_dir;
 
 	if (!tate)
 	{
 		switch (screenRot)
 		{
 			case 1:
-				xargv[paramCount++] = (char*)"-ror";
+				xargv[paramCount++] = (char *)"-ror";
 			break;
 			case 2:
-				xargv[paramCount++] = (char*)"-rol";
+				xargv[paramCount++] = (char *)"-rol";
 			break;
 			case 3:
-				xargv[paramCount++] = (char*)"-flipx";
-				xargv[paramCount++] = (char*)"-flipy";
+				xargv[paramCount++] = (char *)"-flipx";
+				xargv[paramCount++] = (char *)"-flipy";
 			break;
 		}
 	}
@@ -1519,20 +1485,23 @@ static int executeGame(char *path)
 
 	if (is_neogeo && set_neogeo_bios >= 0)
 	{
-		xargv[paramCount++] = (char*)"-bios";
-		xargv[paramCount++] = (char*)neogeo_bioses[set_neogeo_bios].name;
+		xargv[paramCount++] = (char *)"-bios";
+		xargv[paramCount++] = (char *)neogeo_bioses[set_neogeo_bios].name;
 		LOGI("Current loaded NEOGEO BIOS is < %s >\n", neogeo_bioses[set_neogeo_bios].bios);
 	}
 
-/*	LOGI("executing frontend... params:%i\n", paramCount);
-
-	for (int i = 0; xargv[i] != NULL; i++)
+	if (exist_dir && do_cheat)
 	{
-		LOGI("%s ", xargv[i]);
-		LOGI("\n");
+		xargv[paramCount++] = (char *)"-cheat";
+		xargv[paramCount++] = (char *)"-cheatpath";
+		xargv[paramCount++] = (char *)retro_system_dir;
 	}
-*/
-	result = cli_execute(paramCount, (char**)xargv, NULL);
+
+	LOGI("executing frontend... params:%i\n", paramCount);
+	for (int i = 0; xargv[i] != NULL; i++)
+		LOGI("%s \n", xargv[i]);
+
+	result = cli_execute(paramCount, (char **)xargv, NULL);
 	xargv[paramCount - 2] = NULL;
 
 	return result;

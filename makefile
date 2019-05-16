@@ -97,6 +97,7 @@ BUILD_MIDILIB = 0
 
 TARGET_NAME := mba_more
 fpic := 
+INCFLAGS := 
 EXE = 
 LIBS = 
 CORE_DIR = .
@@ -130,7 +131,7 @@ endif
    CC = g++
    AR = @ar
    LD = g++
-   PLATCFLAGS += -fno-merge-constants -fsingle-precision-constant -fno-common -finline
+   PLATCFLAGS += -fno-common -fno-merge-constants -fsingle-precision-constant
    CCOMFLAGS += $(PLATCFLAGS) -ffast-math
    LIBS += -lstdc++ -lpthread
    ALIGNED = 1

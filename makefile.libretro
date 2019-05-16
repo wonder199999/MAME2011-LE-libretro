@@ -3,7 +3,7 @@ SRC_DIR           = $(CORE_DIR)/src
 LIBRETRO_COMM_DIR = $(SRC_DIR)/osd/retro/libretro-common
 DEPS_DIR          = $(SRC_DIR)/lib
 
-INCFLAGS := \
+INCFLAGS += \
 	-I$(LIBRETRO_COMM_DIR)/include \
 	-I$(SRC_DIR)/$(TARGET) \
 	-I$(SRC_DIR)/emu \
@@ -152,6 +152,8 @@ EMUVIDEO = $(EMUOBJ)/video
 
 OBJDIRS += \
 	$(EMUOBJ)/cpu \
+	$(EMUOBJ)/debug \
+	$(EMUOBJ)/debugint \
 	$(EMUOBJ)/sound \
 	$(EMUOBJ)/audio \
 	$(EMUOBJ)/drivers \
@@ -170,6 +172,7 @@ EMUOBJS = \
 	$(EMUOBJ)/clifront.o \
 	$(EMUOBJ)/config.o \
 	$(EMUOBJ)/crsshair.o \
+	$(EMUOBJ)/debugger.o \
 	$(EMUOBJ)/delegate.o \
 	$(EMUOBJ)/devcb.o \
 	$(EMUOBJ)/devcpu.o \
@@ -222,8 +225,20 @@ EMUOBJS = \
 	$(EMUOBJ)/uimenu.o \
 	$(EMUOBJ)/validity.o \
 	$(EMUOBJ)/video.o \
-	$(EMUOBJ)/express.o \
-	$(EMUOBJ)/watchdog.o
+	$(EMUOBJ)/watchdog.o \
+	$(EMUOBJ)/debug/debugcmd.o \
+	$(EMUOBJ)/debug/debugcmt.o \
+	$(EMUOBJ)/debug/debugcon.o \
+	$(EMUOBJ)/debug/debugcpu.o \
+	$(EMUOBJ)/debug/debughlp.o \
+	$(EMUOBJ)/debug/debugvw.o \
+	$(EMUOBJ)/debug/dvdisasm.o \
+	$(EMUOBJ)/debug/dvmemory.o \
+	$(EMUOBJ)/debug/dvstate.o \
+	$(EMUOBJ)/debug/dvtext.o \
+	$(EMUOBJ)/debug/express.o \
+	$(EMUOBJ)/debug/textbuf.o \
+	$(EMUOBJ)/debugint/debugint.o
 
 ifdef PROFILER
 EMUOBJS += \

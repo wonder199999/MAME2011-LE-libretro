@@ -163,10 +163,6 @@ static void update_refresh_speed(running_machine *machine);
 static void create_snapshot_bitmap(device_t *screen);
 static file_error mame_fopen_next(running_machine *machine, const char *pathoption, const char *extension, mame_file **file);
 
-/* movie recording */
-static void video_mng_record_frame(running_machine *machine);
-static void video_avi_record_frame(running_machine *machine);
-
 
 /***************************************************************************
 	INLINE FUNCTIONS
@@ -454,9 +450,6 @@ static int finish_screen_updates(running_machine *machine)
 	/* update our movie recording and burn-in state */
 	if (!machine->paused())
 	{
-		video_mng_record_frame(machine);
-		video_avi_record_frame(machine);
-
 		/* iterate over screens and update the burnin for the ones that care */
 		for (screen_device *screen = screen_first(*machine); screen != NULL; screen = screen_next(screen))
 			screen->update_burnin();
@@ -873,7 +866,7 @@ static void update_frameskip(running_machine *machine)
 			else
 			{
 				/* if below 80% speed, be more aggressive */
-				if (global.speed_percent < 0.80 *  speed)
+				if (global.speed_percent < 0.80 * speed)
 					global.frameskip_adjust -= (0.90 * speed - global.speed_percent) / 0.05;
 				/* if we're close, only force it up to frameskip 8 */
 				else if (global.frameskip_level < 8)
@@ -1296,7 +1289,7 @@ void video_mng_end_recording(running_machine *machine)
     video_mng_record_frame - record a frame of a
     movie
 -------------------------------------------------*/
-
+#if 0
 static void video_mng_record_frame(running_machine *machine)
 {
 	/* only record if we have a file */
@@ -1341,7 +1334,7 @@ static void video_mng_record_frame(running_machine *machine)
 		}
 	}
 }
-
+#endif
 
 
 /***************************************************************************
@@ -1429,7 +1422,7 @@ void video_avi_end_recording(running_machine *machine)
     video_avi_record_frame - record a frame of a
     movie
 -------------------------------------------------*/
-
+#if 0
 static void video_avi_record_frame(running_machine *machine)
 {
 	/* only record if we have a file */
@@ -1458,7 +1451,7 @@ static void video_avi_record_frame(running_machine *machine)
 		}
 	}
 }
-
+#endif
 
 /*-------------------------------------------------
     video_avi_add_sound - add sound to an AVI
