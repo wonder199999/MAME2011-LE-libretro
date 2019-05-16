@@ -17,10 +17,10 @@ PTR64 = 0
 
 # ------------------------------------------------------------
 # Set the BIOS used by NEOGEO
-# NEOGEO_BIOS = 1 - Use all NEOGEO BIOS ,
-# NEOGEO_BIOS = 0 - Use part of the NEOGEO BIOS. (default)
+# NEOGEO_BIOS = full - Use all NEOGEO BIOS ,
+# NEOGEO_BIOS = part - Use part of the NEOGEO BIOS. (default)
 # ------------------------------------------------------------
-NEOGEO_BIOS = 0
+NEOGEO_BIOS = part
 
 # System platform
 UNAME = $(shell uname -a)
@@ -73,6 +73,8 @@ endif
 DEFS = -DCRLF=2 -DDISABLE_MIDI=1
 # Default to something reasonable for all platforms
 ARFLAGS = -cr
+# uncomment next line to build PortMidi as part of MAME/MESS build
+BUILD_MIDILIB = 0
 
 #-------------------------------------------------
 # compile flags
@@ -83,7 +85,7 @@ ARFLAGS = -cr
 #-------------------------------------------------
 
 # start with empties for everything
-CCOMFLAGS = -DDISABLE_MIDI
+CCOMFLAGS = -DDISABLE_MIDI -D__LIBRETRO__
 CONLYFLAGS =
 COBJFLAGS =
 CPPONLYFLAGS =
@@ -91,9 +93,6 @@ CPPONLYFLAGS =
 # LDFLAGS are used generally; LDFLAGSEMULATOR are additional flags only used when linking the core emulator
 LDFLAGS =
 LDFLAGSEMULATOR =
-
-# uncomment next line to build PortMidi as part of MAME/MESS build
-BUILD_MIDILIB = 0
 
 TARGET_NAME := mba_more
 fpic := 
@@ -108,19 +107,26 @@ OPTFLAG ?= 0
 
 # Use software rendering by default
 VRENDER ?= soft
+HW_RENDER ?= 0
 ifeq ($(VRENDER), opengl)
-	CCOMFLAGS  += -DHAVE_OPENGL
+	CCOMFLAGS += -DHAVE_OPENGL
+	HW_RENDER = 1
+else ifeq ($(VRENDER), gles)
+	CCOMFLAGS += -DHAVE_OPENGLES
+	HW_RENDER = 2
 endif
 
 
 # UNIX
 ifeq ($(platform), unix)
    TARGETLIB := $(TARGET_NAME)_libretro.so
-   TARGETOS=linux
+   TARGETOS = linux
    fpic = -fPIC
    SHARED := -shared -Wl,--version-script=src/osd/retro/link.T
-ifeq ($(VRENDER),opengl)
+ifeq ($(HW_RENDER), 1)
    LIBS += -lGL
+else ifeq ($(HW_RENDER), 2)
+   LIBS += -lGLESv2
 endif
    LDFLAGS += $(SHARED)
    NATIVELD = g++
@@ -335,7 +341,7 @@ else ifeq ($(platform), wincross)
    CC_AS ?= gcc
    SHARED := -shared -static-libgcc -static-libstdc++ -s -Wl,--version-script=src/osd/retro/link.T
    CCOMFLAGS +=-D__WIN32__ -D__WIN32_LIBRETRO__
-ifeq ($(VRENDER),opengl)
+ifeq ($(HW_RENDER), 1)
    LIBS += -lopengl32
 endif
    LDFLAGS += $(SHARED)
@@ -356,18 +362,15 @@ ifneq ($(MDEBUG),1)
    SHARED += -s
 endif
    CCOMFLAGS += -D__WIN32__ -D__WIN32_LIBRETRO__
-ifeq ($(VRENDER),opengl) 
+ifeq ($(HW_RENDER), 1)
    LIBS += -lopengl32
 endif
-   LDFLAGS +=   $(SHARED)
+   LDFLAGS += $(SHARED)
    EXE = .exe
-   DEFS = -DCRLF=3
-   DEFS += -DX64_WINDOWS_ABI
+   DEFS = -DCRLF=3 -DX64_WINDOWS_ABI
 endif
 
 # Platform parameters finish
-
-CCOMFLAGS  += -D__LIBRETRO__
 
 GIT_VERSION ?= " $(shell git rev-parse --short HEAD || echo unknown)"
 ifneq ($(GIT_VERSION)," unknown")
@@ -397,6 +400,7 @@ CROSS_BUILD_OSD = retro
 
 # specify optimization level or leave commented to use the default
 # (default is OPTIMIZE = 3 normally, or OPTIMIZE = 0 with symbols)
+# You can use -O3/-O2, but -Os will cause a crash
 OPTIMIZE = 3
 
 #-------------------------------------------------
@@ -647,7 +651,7 @@ ifeq ($(ARM_ENABLED), 1)
    CFLAGS += -DARM_ENABLED
 endif
 
-ifeq ($(NEOGEO_BIOS), 1)
+ifeq ($(NEOGEO_BIOS), full)
    CFLAGS += -DUSE_FULLY
 endif
 
