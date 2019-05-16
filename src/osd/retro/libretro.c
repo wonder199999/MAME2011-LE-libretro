@@ -236,14 +236,12 @@ static INT32 set_frame_skip;
 static INT32 vertical;
 static INT32 orient;
 static INT32 set_neogeo_bios;
+static UINT8 turbo_enable, turbo_delay;
 static UINT32 tate;
 static UINT32 screenRot = 0;
 static UINT32 pauseg = 0;
 static UINT32 mame_reset = 0;
 static UINT32 FirstTimeUpdate = 1;
-static UINT32 turbo_enable;
-static UINT32 turbo_delay;
-static UINT32 turbo_state;
 static UINT32 macro_state;
 static UINT32 sample_rate = 48000;
 static UINT32 adjust_opt[7] = { 0/*Enable/Disable*/, 0/*Limit*/, 0/*GetRefreshRate*/, 0/*Brightness*/, 0/*Contrast*/, 0/*Gamma*/, 0/*Overclock*/ };
@@ -741,8 +739,6 @@ void retro_run (void)
 	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && updated)
       		check_variables();
 
-	turbo_state > turbo_delay ? turbo_state = 0 : turbo_state++;
-
 	retro_poll_mame_input();
 	retro_main_loop();
 
@@ -1041,6 +1037,7 @@ static inline void retro_poll_mame_input( void )
 {
 	input_poll_cb();
 
+	static UINT8 turbo_state[MAX_JOYPADS][2];
 	UINT32 i;
 
 	if (keyboard_input)
@@ -1080,16 +1077,68 @@ static inline void retro_poll_mame_input( void )
 
 		switch (turbo_enable)
 		{
-			case 0:
+			case 0: break;
+			case 1:
+			{
+				if (PLAYER_PRESS(A))
+				{
+					if (turbo_state[i][0] > turbo_delay)
+					{
+						turbo_state[i][0] = 0;
+						pad_state[i][KEY_BUTTON_1] = TRUE;
+					}
+					else
+					{
+						turbo_state[i][0]++;
+						pad_state[i][KEY_BUTTON_1] = FALSE;
+					}
+				}
 				break;
-			case 1: if (PLAYER_PRESS(A))  pad_state[i][KEY_BUTTON_1] = turbo_state < turbo_delay ? FALSE : TRUE;
+			}
+			case 2:
+			{
+				if (PLAYER_PRESS(B))
+				{
+					if (turbo_state[i][1] > turbo_delay)
+					{
+						turbo_state[i][1] = 0;
+						pad_state[i][KEY_BUTTON_2] = TRUE;
+					}
+					else
+					{
+						turbo_state[i][1]++;
+						pad_state[i][KEY_BUTTON_2] = FALSE; }
+				}
 				break;
-			case 2: if (PLAYER_PRESS(B))  pad_state[i][KEY_BUTTON_2] = turbo_state < turbo_delay ? FALSE : TRUE;
+			}
+			case 3:
+			{
+				if (PLAYER_PRESS(R2))
+				{
+					if (turbo_state[i][0] > turbo_delay)
+					{
+						turbo_state[i][0] = 0;
+						pad_state[i][KEY_BUTTON_1] = TRUE;
+					}
+					else
+						turbo_state[i][0]++;
+				}
 				break;
-			case 3: if (PLAYER_PRESS(R2)) pad_state[i][KEY_BUTTON_1] = turbo_state < turbo_delay ? FALSE : TRUE;
+			}
+			case 4:
+			{
+				if (PLAYER_PRESS(R2))
+				{
+					if (turbo_state[i][1] > turbo_delay)
+					{
+						turbo_state[i][1] = 0;
+						pad_state[i][KEY_BUTTON_2] = TRUE;
+					}
+					else
+						turbo_state[i][1]++;
+				}
 				break;
-			case 4: if (PLAYER_PRESS(R2)) pad_state[i][KEY_BUTTON_2] = turbo_state < turbo_delay ? FALSE : TRUE;
-				break;
+			}
 		}
 
 		switch (macro_state)
@@ -1204,7 +1253,7 @@ void osd_update(running_machine *machine, int skip_redraw)
 				{
 					adjust_opt[2] = 0;
 					refresh_rate = (machine->primary_screen == NULL) ? screen_device::k_default_frame_rate :
-							ATTOSECONDS_TO_HZ(machine->primary_screen->frame_period().attoseconds);
+								ATTOSECONDS_TO_HZ(machine->primary_screen->frame_period().attoseconds);
 					update_geometry();
 				}
 
