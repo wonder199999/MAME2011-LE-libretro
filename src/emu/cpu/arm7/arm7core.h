@@ -33,16 +33,21 @@
 #ifndef __ARM7CORE_H__
 #define __ARM7CORE_H__
 
+#define ARM7_MMU_ENABLE_HACK	0
 
 /****************************************************************************************************
  *  INTERRUPT LINES/EXCEPTIONS
  ***************************************************************************************************/
 enum
 {
-    ARM7_IRQ_LINE=0, ARM7_FIRQ_LINE,
-    ARM7_ABORT_EXCEPTION, ARM7_ABORT_PREFETCH_EXCEPTION, ARM7_UNDEFINE_EXCEPTION,
-    ARM7_NUM_LINES
+	ARM7_IRQ_LINE = 0,
+	ARM7_FIRQ_LINE,
+	ARM7_ABORT_EXCEPTION,
+	ARM7_ABORT_PREFETCH_EXCEPTION,
+	ARM7_UNDEFINE_EXCEPTION,
+	ARM7_NUM_LINES
 };
+
 // Really there's only 1 ABORT Line.. and cpu decides whether it's during data fetch or prefetch, but we let the user specify
 
 /****************************************************************************************************
@@ -50,12 +55,13 @@ enum
  ***************************************************************************************************/
 enum
 {
-    ARM7_PC = 0,
-    ARM7_R0, ARM7_R1, ARM7_R2, ARM7_R3, ARM7_R4, ARM7_R5, ARM7_R6, ARM7_R7,
-    ARM7_R8, ARM7_R9, ARM7_R10, ARM7_R11, ARM7_R12, ARM7_R13, ARM7_R14, ARM7_R15,
-    ARM7_FR8, ARM7_FR9, ARM7_FR10, ARM7_FR11, ARM7_FR12, ARM7_FR13, ARM7_FR14,
-    ARM7_IR13, ARM7_IR14, ARM7_SR13, ARM7_SR14, ARM7_FSPSR, ARM7_ISPSR, ARM7_SSPSR,
-    ARM7_CPSR, ARM7_AR13, ARM7_AR14, ARM7_ASPSR, ARM7_UR13, ARM7_UR14, ARM7_USPSR
+	ARM7_PC = 0,
+	ARM7_R0, ARM7_R1, ARM7_R2, ARM7_R3, ARM7_R4, ARM7_R5, ARM7_R6, ARM7_R7,
+	ARM7_R8, ARM7_R9, ARM7_R10, ARM7_R11, ARM7_R12, ARM7_R13, ARM7_R14, ARM7_R15,
+	ARM7_FR8, ARM7_FR9, ARM7_FR10, ARM7_FR11, ARM7_FR12, ARM7_FR13, ARM7_FR14,
+	ARM7_IR13, ARM7_IR14, ARM7_SR13, ARM7_SR14, ARM7_FSPSR, ARM7_ISPSR, ARM7_SSPSR,
+	ARM7_CPSR,
+	ARM7_AR13, ARM7_AR14, ARM7_ASPSR, ARM7_UR13, ARM7_UR14, ARM7_USPSR
 };
 
 /* There are 36 Unique - 32 bit processor registers */
@@ -63,34 +69,35 @@ enum
 /* This is a list of each *unique* register */
 enum
 {
-    /* All modes have the following */
-    eR0 = 0, eR1, eR2, eR3, eR4, eR5, eR6, eR7,
-    eR8, eR9, eR10, eR11, eR12,
-    eR13, /* Stack Pointer */
-    eR14, /* Link Register (holds return address) */
-    eR15, /* Program Counter */
-    eCPSR, /* Current Status Program Register */
+	/* All modes have the following */
+	eR0 = 0,
+	eR1, eR2, eR3, eR4, eR5, eR6, eR7,
+	eR8, eR9, eR10, eR11, eR12,
+	eR13,	/* Stack Pointer */
+	eR14,	/* Link Register (holds return address) */
+	eR15,	/* Program Counter */
+	eCPSR,	/* Current Status Program Register */
 
-    /* Fast Interrupt - Bank switched registers */
-    eR8_FIQ, eR9_FIQ, eR10_FIQ, eR11_FIQ, eR12_FIQ, eR13_FIQ, eR14_FIQ, eSPSR_FIQ,
+	/* Fast Interrupt - Bank switched registers */
+	eR8_FIQ, eR9_FIQ, eR10_FIQ, eR11_FIQ, eR12_FIQ, eR13_FIQ, eR14_FIQ, eSPSR_FIQ,
 
-    /* IRQ - Bank switched registers */
-    eR13_IRQ, eR14_IRQ, eSPSR_IRQ,
+	/* IRQ - Bank switched registers */
+	eR13_IRQ, eR14_IRQ, eSPSR_IRQ,
 
-    /* Supervisor/Service Mode - Bank switched registers */
-    eR13_SVC, eR14_SVC, eSPSR_SVC,
+	/* Supervisor/Service Mode - Bank switched registers */
+	eR13_SVC, eR14_SVC, eSPSR_SVC,
 
-    /* Abort Mode - Bank switched registers */
-    eR13_ABT, eR14_ABT, eSPSR_ABT,
+	/* Abort Mode - Bank switched registers */
+	eR13_ABT, eR14_ABT, eSPSR_ABT,
 
-    /* Undefined Mode - Bank switched registers */
-    eR13_UND, eR14_UND, eSPSR_UND,
+	/* Undefined Mode - Bank switched registers */
+	eR13_UND, eR14_UND, eSPSR_UND,
 
-    kNumRegisters
+	kNumRegisters
 };
 
 /* Coprocessor-related macros */
-#define COPRO_TLB_BASE      	cpustate->tlbBase
+#define COPRO_TLB_BASE			cpustate->tlbBase
 #define COPRO_TLB_BASE_MASK                 0xffffc000
 #define COPRO_TLB_VADDR_FLTI_MASK           0xfff00000
 #define COPRO_TLB_VADDR_FLTI_MASK_SHIFT     18
@@ -112,7 +119,7 @@ enum
 #define COPRO_TLB_SECTION_TABLE             2
 #define COPRO_TLB_FINE_TABLE                3
 
-#define COPRO_CTRL            cpustate->control
+#define COPRO_CTRL			cpustate->control
 #define COPRO_CTRL_MMU_EN                   0x00000001
 #define COPRO_CTRL_ADDRFAULT_EN             0x00000002
 #define COPRO_CTRL_DCACHE_EN                0x00000004
@@ -136,10 +143,14 @@ enum
 #define COPRO_CTRL_INTVEC_F                 1
 #define COPRO_CTRL_MASK                     0x0000338f
 
-/* Coprocessor Registers */
-#define ARM7COPRO_REGS \
-    UINT32 control; \
-    UINT32 tlbBase;
+#define COPRO_DOMAIN_ACCESS_CONTROL	cpustate->domainAccessControl
+
+#define COPRO_FAULT_STATUS_D    	cpustate->faultStatus[0]
+#define COPRO_FAULT_STATUS_P    	cpustate->faultStatus[1]
+
+#define COPRO_FAULT_ADDRESS     	cpustate->faultAddress
+
+#define COPRO_FCSE_PID		cpustate->fcsePID
 
 enum
 {
@@ -149,22 +160,32 @@ enum
 	eARM_ARCHFLAGS_MMU	= 8,		// has on-board MMU (traditional ARM style like the SA1110)
 	eARM_ARCHFLAGS_SA	= 16,		// StrongARM extensions (enhanced TLB)
 	eARM_ARCHFLAGS_XSCALE	= 32,		// XScale extensions (CP14, enhanced TLB)
+	eARM_ARCHFLAGS_MODE26	= 64,		// supports 26-bit backwards compatibility mode
 };
 
-#define ARM7CORE_REGS                   \
-    UINT32 sArmRegister[kNumRegisters]; \
-    UINT8 pendingIrq;                   \
-    UINT8 pendingFiq;                   \
-    UINT8 pendingAbtD;                  \
-    UINT8 pendingAbtP;                  \
-    UINT8 pendingUnd;                   \
-    UINT8 pendingSwi;                   \
-    INT32 iCount;			\
-	endianness_t endian;				\
-    device_irq_callback irq_callback;		\
-    legacy_cpu_device *device;		\
-    address_space *program;			\
-    direct_read_data *direct;
+/* Coprocessor Registers */
+#define ARM7COPRO_REGS			\
+	UINT32 control;			\
+	UINT32 tlbBase;			\
+	UINT32 faultStatus[2];		\
+	UINT32 faultAddress;		\
+	UINT32 fcsePID;			\
+	UINT32 domainAccessControl;
+
+#define ARM7CORE_REGS				\
+	UINT32 sArmRegister[kNumRegisters];	\
+	UINT8 pendingIrq;			\
+	UINT8 pendingFiq;			\
+	UINT8 pendingAbtD;			\
+	UINT8 pendingAbtP;			\
+	UINT8 pendingUnd;			\
+	UINT8 pendingSwi;			\
+	INT32 iCount;				\
+	endianness_t		 endian;	\
+	device_irq_callback	 irq_callback;	\
+	legacy_cpu_device	*device;	\
+	address_space		*program;	\
+	direct_read_data	*direct;
 
 
 /* CPU state struct */
@@ -173,9 +194,12 @@ typedef struct
 	ARM7CORE_REGS			// these must be included in your cpu specific register implementation
 	ARM7COPRO_REGS
 
-	UINT8 archRev;			// ARM architecture revision (3, 4, and 5 are valid)
-	UINT8 archFlags;		// architecture flags
+	UINT8	archRev;		// ARM architecture revision (3, 4, and 5 are valid)
+	UINT8	archFlags;		// architecture flags
 
+#if ARM7_MMU_ENABLE_HACK
+	UINT32	mmu_enable_addr;	// workaround for "MMU is enabled when PA != VA" problem
+#endif
 } arm_state;
 
 /****************************************************************************************************
@@ -184,36 +208,36 @@ typedef struct
 // Mode values come from bit 4-0 of CPSR, but we are ignoring bit 4 here, since bit 4 always = 1 for valid modes
 enum
 {
-    eARM7_MODE_USER = 0x0,      // Bit: 4-0 = 10000
-    eARM7_MODE_FIQ  = 0x1,      // Bit: 4-0 = 10001
-    eARM7_MODE_IRQ  = 0x2,      // Bit: 4-0 = 10010
-    eARM7_MODE_SVC  = 0x3,      // Bit: 4-0 = 10011
-    eARM7_MODE_ABT  = 0x7,      // Bit: 4-0 = 10111
-    eARM7_MODE_UND  = 0xb,      // Bit: 4-0 = 11011
-    eARM7_MODE_SYS  = 0xf       // Bit: 4-0 = 11111
+	eARM7_MODE_USER = 0x00,     // Bit: 4-0 = 10000
+	eARM7_MODE_FIQ  = 0x01,     // Bit: 4-0 = 10001
+	eARM7_MODE_IRQ  = 0x02,     // Bit: 4-0 = 10010
+	eARM7_MODE_SVC  = 0x03,     // Bit: 4-0 = 10011
+	eARM7_MODE_ABT  = 0x07,     // Bit: 4-0 = 10111
+	eARM7_MODE_UND  = 0x0b,     // Bit: 4-0 = 11011
+	eARM7_MODE_SYS  = 0x0f      // Bit: 4-0 = 11111
 };
 
 #define ARM7_NUM_MODES 0x10
 
 static const int thumbCycles[256] =
 {
-//  0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  // 0
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  // 1
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  // 2
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  // 3
-    1, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 3, 3, 3, 3, 3,  // 4
-    2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,  // 5
-    2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3,  // 6
-    2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3,  // 7
-    2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3,  // 8
-    2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3,  // 9
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,  // a
-    1, 1, 1, 1, 2, 2, 1, 1, 1, 1, 1, 1, 2, 4, 1, 1,  // b
-    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,  // c
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3,  // d
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,  // e
-    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2   // f
+//	0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  // 0
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  // 1
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  // 2
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  // 3
+	1, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 3, 3, 3, 3, 3,  // 4
+	2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,  // 5
+	2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3,  // 6
+	2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3,  // 7
+	2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3,  // 8
+	2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3,  // 9
+	3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,  // a
+	1, 1, 1, 1, 2, 2, 1, 1, 1, 1, 1, 1, 2, 4, 1, 1,  // b
+	2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,  // c
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3,  // d
+	3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,  // e
+	2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2   // f
 };
 
 /* 17 processor registers are visible at any given time,
@@ -222,51 +246,57 @@ static const int thumbCycles[256] =
 
 static const int sRegisterTable[ARM7_NUM_MODES][18] =
 {
-    { /* USR */
-        eR0, eR1, eR2, eR3, eR4, eR5, eR6, eR7,
-        eR8, eR9, eR10, eR11, eR12,
-        eR13, eR14,
-        eR15, eCPSR  // No SPSR in this mode
-    },
-    { /* FIQ */
-        eR0, eR1, eR2, eR3, eR4, eR5, eR6, eR7,
-        eR8_FIQ, eR9_FIQ, eR10_FIQ, eR11_FIQ, eR12_FIQ,
-        eR13_FIQ, eR14_FIQ,
-        eR15, eCPSR, eSPSR_FIQ
-    },
-    { /* IRQ */
-        eR0, eR1, eR2, eR3, eR4, eR5, eR6, eR7,
-        eR8, eR9, eR10, eR11, eR12,
-        eR13_IRQ, eR14_IRQ,
-        eR15, eCPSR, eSPSR_IRQ
-    },
-    { /* SVC */
-        eR0, eR1, eR2, eR3, eR4, eR5, eR6, eR7,
-        eR8, eR9, eR10, eR11, eR12,
-        eR13_SVC, eR14_SVC,
-        eR15, eCPSR, eSPSR_SVC
-    },
-    {0}, {0}, {0},        // values for modes 4,5,6 are not valid
-    { /* ABT */
-        eR0, eR1, eR2, eR3, eR4, eR5, eR6, eR7,
-        eR8, eR9, eR10, eR11, eR12,
-        eR13_ABT, eR14_ABT,
-        eR15, eCPSR, eSPSR_ABT
-    },
-    {0}, {0}, {0},        // values for modes 8,9,a are not valid!
-    { /* UND */
-        eR0, eR1, eR2, eR3, eR4, eR5, eR6, eR7,
-        eR8, eR9, eR10, eR11, eR12,
-        eR13_UND, eR14_UND,
-        eR15, eCPSR, eSPSR_UND
-    },
-    {0}, {0}, {0},        // values for modes c,d, e are not valid!
-    { /* SYS */
-        eR0, eR1, eR2, eR3, eR4, eR5, eR6, eR7,
-        eR8, eR9, eR10, eR11, eR12,
-        eR13, eR14,
-        eR15, eCPSR  // No SPSR in this mode
-    }
+	{ /* USR */
+		eR0, eR1, eR2, eR3, eR4, eR5, eR6, eR7,
+		eR8, eR9, eR10, eR11, eR12,
+		eR13, eR14,
+		eR15, eCPSR  // No SPSR in this mode
+	},
+	{ /* FIQ */
+		eR0, eR1, eR2, eR3, eR4, eR5, eR6, eR7,
+		eR8_FIQ, eR9_FIQ, eR10_FIQ, eR11_FIQ, eR12_FIQ,
+		eR13_FIQ, eR14_FIQ,
+		eR15, eCPSR, eSPSR_FIQ
+	},
+	{ /* IRQ */
+		eR0, eR1, eR2, eR3, eR4, eR5, eR6, eR7,
+		eR8, eR9, eR10, eR11, eR12,
+		eR13_IRQ, eR14_IRQ,
+		eR15, eCPSR, eSPSR_IRQ
+	},
+	{ /* SVC */
+		eR0, eR1, eR2, eR3, eR4, eR5, eR6, eR7,
+		eR8, eR9, eR10, eR11, eR12,
+		eR13_SVC, eR14_SVC,
+		eR15, eCPSR, eSPSR_SVC
+	},
+	{0},
+	{0},
+	{0},        // values for modes 4,5,6 are not valid
+	{ /* ABT */
+		eR0, eR1, eR2, eR3, eR4, eR5, eR6, eR7,
+		eR8, eR9, eR10, eR11, eR12,
+		eR13_ABT, eR14_ABT,
+		eR15, eCPSR, eSPSR_ABT
+	},
+	{0},
+	{0},
+	{0},        // values for modes 8,9,a are not valid!
+	{ /* UND */
+		eR0, eR1, eR2, eR3, eR4, eR5, eR6, eR7,
+		eR8, eR9, eR10, eR11, eR12,
+		eR13_UND, eR14_UND,
+		eR15, eCPSR, eSPSR_UND
+	},
+	{0},
+	{0},
+	{0},        // values for modes c,d, e are not valid!
+	{ /* SYS */
+		eR0, eR1, eR2, eR3, eR4, eR5, eR6, eR7,
+		eR8, eR9, eR10, eR11, eR12,
+		eR13, eR14,
+		eR15, eCPSR  // No SPSR in this mode
+	}
 };
 
 #define N_BIT   31
@@ -426,42 +456,42 @@ static const int sRegisterTable[ARM7_NUM_MODES][18] =
 
 enum
 {
-    OPCODE_AND, /* 0000 */
-    OPCODE_EOR, /* 0001 */
-    OPCODE_SUB, /* 0010 */
-    OPCODE_RSB, /* 0011 */
-    OPCODE_ADD, /* 0100 */
-    OPCODE_ADC, /* 0101 */
-    OPCODE_SBC, /* 0110 */
-    OPCODE_RSC, /* 0111 */
-    OPCODE_TST, /* 1000 */
-    OPCODE_TEQ, /* 1001 */
-    OPCODE_CMP, /* 1010 */
-    OPCODE_CMN, /* 1011 */
-    OPCODE_ORR, /* 1100 */
-    OPCODE_MOV, /* 1101 */
-    OPCODE_BIC, /* 1110 */
-    OPCODE_MVN  /* 1111 */
+	OPCODE_AND, /* 0000 */
+	OPCODE_EOR, /* 0001 */
+	OPCODE_SUB, /* 0010 */
+	OPCODE_RSB, /* 0011 */
+	OPCODE_ADD, /* 0100 */
+	OPCODE_ADC, /* 0101 */
+	OPCODE_SBC, /* 0110 */
+	OPCODE_RSC, /* 0111 */
+	OPCODE_TST, /* 1000 */
+	OPCODE_TEQ, /* 1001 */
+	OPCODE_CMP, /* 1010 */
+	OPCODE_CMN, /* 1011 */
+	OPCODE_ORR, /* 1100 */
+	OPCODE_MOV, /* 1101 */
+	OPCODE_BIC, /* 1110 */
+	OPCODE_MVN  /* 1111 */
 };
 
 enum
 {
-    COND_EQ = 0,          /*  Z           equal                   */
-    COND_NE,              /* ~Z           not equal               */
-    COND_CS, COND_HS = 2, /*  C           unsigned higher or same */
-    COND_CC, COND_LO = 3, /* ~C           unsigned lower          */
-    COND_MI,              /*  N           negative                */
-    COND_PL,              /* ~N           positive or zero        */
-    COND_VS,              /*  V           overflow                */
-    COND_VC,              /* ~V           no overflow             */
-    COND_HI,              /*  C && ~Z     unsigned higher         */
-    COND_LS,              /* ~C ||  Z     unsigned lower or same  */
-    COND_GE,              /*  N == V      greater or equal        */
-    COND_LT,              /*  N != V      less than               */
-    COND_GT,              /* ~Z && N == V greater than            */
-    COND_LE,              /*  Z || N != V less than or equal      */
-    COND_AL,              /*  1           always                  */
-    COND_NV               /*  0           never                   */
+	COND_EQ = 0,          /*  Z           equal                   */
+	COND_NE,              /* ~Z           not equal               */
+	COND_CS, COND_HS = 2, /*  C           unsigned higher or same */
+	COND_CC, COND_LO = 3, /* ~C           unsigned lower          */
+	COND_MI,              /*  N           negative                */
+	COND_PL,              /* ~N           positive or zero        */
+	COND_VS,              /*  V           overflow                */
+	COND_VC,              /* ~V           no overflow             */
+	COND_HI,              /*  C && ~Z     unsigned higher         */
+	COND_LS,              /* ~C ||  Z     unsigned lower or same  */
+	COND_GE,              /*  N == V      greater or equal        */
+	COND_LT,              /*  N != V      less than               */
+	COND_GT,              /* ~Z && N == V greater than            */
+	COND_LE,              /*  Z || N != V less than or equal      */
+	COND_AL,              /*  1           always                  */
+	COND_NV               /*  0           never                   */
 };
 
 #define LSL(v, s) ((v) << (s))
@@ -473,18 +503,30 @@ enum
 #define R15                     ARM7REG(eR15)
 #define SPSR                    17                     // SPSR is always the 18th register in our 0 based array sRegisterTable[][18]
 #define GET_CPSR                ARM7REG(eCPSR)
-#define SET_CPSR(v)             (GET_CPSR = (v))
+#define SET_CPSR(v)             set_cpsr(cpustate, v)
 #define MODE_FLAG               0xF                    // Mode bits are 4:0 of CPSR, but we ignore bit 4.
 #define GET_MODE                (GET_CPSR & MODE_FLAG)
 #define SIGN_BIT                ((UINT32)(1 << 31))
 #define SIGN_BITS_DIFFER(a, b)  (((a) ^ (b)) >> 31)
+
 /* I really don't know why these were set to 16-bit, the thumb registers are still 32-bit ... */
 #define THUMB_SIGN_BIT               ((UINT32)(1 << 31))
 #define THUMB_SIGN_BITS_DIFFER(a, b) (((a)^(b)) >> 31)
 
+#define MODE32		(GET_CPSR & 0x10)
+#define MODE26		(!(GET_CPSR & 0x10))
+#define GET_PC                  (MODE32 ? R15 : R15 & 0x03FFFFFC)
+
+#define ARM7_TLB_ABORT_D (1 << 0)
+#define ARM7_TLB_ABORT_P (1 << 1)
+#define ARM7_TLB_READ    (1 << 2)
+#define ARM7_TLB_WRITE   (1 << 3)
+
 /* At one point I thought these needed to be cpu implementation specific, but they don't.. */
 #define GET_REGISTER(state, reg)       GetRegister(state, reg)
 #define SET_REGISTER(state, reg, val)  SetRegister(state, reg, val)
+#define GET_MODE_REGISTER(state, mode, reg)       GetModeRegister(state, mode, reg)
+#define SET_MODE_REGISTER(state, mode, reg, val)  SetModeRegister(state, mode, reg, val)
 #define ARM7_CHECKIRQ           arm7_check_irq_state(cpustate)
 
 extern write32_device_func arm7_coproc_do_callback;
