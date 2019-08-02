@@ -268,7 +268,7 @@ else ifneq (,$(findstring rpi,$(platform)))
    NATIVELD = g++
    LD = g++
    TARGETLIB := $(TARGET_NAME)_libretro.so
-   SHARED := -shared -Wl,--no-undefined
+   SHARED := -shared -Wl,--version-script=src/osd/retro/link.T
    fpic = -fPIC
    LDFLAGS += $(SHARED)
    LIBS += -lstdc++ -lpthread
@@ -284,7 +284,7 @@ endif
 # Generic ARM
 else ifneq (,$(findstring armv,$(platform)))
    TARGETLIB := $(TARGET_NAME)_libretro.so
-   SHARED := -shared -Wl,--no-undefined
+   SHARED := -shared -Wl,--version-script=src/osd/retro/link.T
    fpic = -fPIC
    CC = g++
    LD = g++
