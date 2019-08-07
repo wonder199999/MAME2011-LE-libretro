@@ -1154,9 +1154,9 @@ const game_driver *const drivers[] =
 	DRIVER( myststono )
 	DRIVER( myststonoi )
 
-	/*****************/
-	/*	IGS	 */
-	/*****************/
+	/************************/
+	/*	IGS PGM1	*/
+	/************************/
 	DRIVER( pgm )			// System BIOS driver
 
 	DRIVER( orlegend )
@@ -1255,5 +1255,58 @@ const game_driver *const drivers[] =
 	DRIVER( espgal )
 
 	DRIVER( orleg2 )
+
+// IREM M72
+	DRIVER( ltswords )
+	DRIVER( kengo )
+	DRIVER( kengoa )
+
+DRIVER( rtype )
+DRIVER( rtypej )
+DRIVER( rtypejp )
+DRIVER( rtypeu )
+DRIVER( rtypeb )
+
+DRIVER( bchopper )
+DRIVER( mrheli )
+
+DRIVER( nspirit )
+DRIVER( nspiritj )
+
+DRIVER( imgfight )
+DRIVER( imgfighto )
+
+DRIVER( loht )
+DRIVER( lohtj )
+DRIVER( lohtb )
+DRIVER( lohtb2 )
+
+DRIVER( xmultipl )
+DRIVER( xmultiplm72 )
+
+DRIVER( dbreed )
+DRIVER( dbreedm72 )
+
+DRIVER( rtype2 )
+DRIVER( rtype2j )
+DRIVER( rtype2jc )
+
+DRIVER( majtitle )
+DRIVER( majtitlej )
+
+DRIVER( hharry )
+DRIVER( hharryu )
+DRIVER( dkgensan )
+DRIVER( dkgensanm72 )
+
+DRIVER( poundfor )
+DRIVER( poundforj )
+DRIVER( poundforu )
+
+DRIVER( airduel )
+
+DRIVER( cosmccop )
+DRIVER( gallop )
+
 
 #endif	/* DRIVER_RECURSIVE */

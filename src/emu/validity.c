@@ -542,18 +542,34 @@ static bool validate_roms(int drivnum, const machine_config *config, region_arra
 			{
 				const char *hash;
 				const char *s;
+				int i;
 
 				items_since_region++;
 
 				/* track the last filename we found */
 				last_name = ROM_GETNAME(romp);
 
+				const char *ignore_names[] = {
+					"EP1.bin", "EP2.bin",	// NEOGEO 'Dragon's Heaven (unkneo)'
+					"KEN-D-H0-.IC55", "KEN-D-L0-.IC61", "KEN_B-4N-.IC23", "KEN_B-4P-.IC24", // IREM M72 'kengoa'
+					NULL
+				};
+
 				/* make sure it's all lowercase */
 				for (s = last_name; *s; s++)
 				{
 					if (tolower((UINT8)*s) != *s)
 					{
-						if ( !(strcmp(last_name, "EP1.bin") == 0 || strcmp(last_name, "EP2.bin") == 0) )	/* for Dragon's Heaven (unkneo) */
+						for (i = 0; ignore_names[i] != NULL; i++)
+						{
+							if (strcmp(last_name, ignore_names[i]) == 0)
+							{
+								i = 0x10000000;
+								break;
+							}
+						}
+
+						if (i != 0x10000000)
 						{
 							mame_printf_error("%s: %s has upper case ROM name %s\n", driver->source_file, driver->name, last_name);
 							error = true;

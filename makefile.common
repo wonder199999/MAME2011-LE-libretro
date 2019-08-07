@@ -64,6 +64,7 @@ CPUS += M6800
 CPUS += M6805
 CPUS += M6809
 CPUS += MCS48
+CPUS += MCS51
 CPUS += NEC
 CPUS += Z80
 
@@ -73,6 +74,10 @@ CPUS += Z80
 #-------------------------------------------------
 
 SOUNDS += DAC
+SOUNDS += DMADAC
+SOUNDS += SPEAKER
+SOUNDS += BEEP
+
 SOUNDS += ICS2115
 SOUNDS += IREMGA20
 SOUNDS += MSM5205
@@ -113,6 +118,7 @@ $(MAMEOBJ)/capcom.a: \
 	$(MACHINE)/cps2crpt.o $(MACHINE)/kabuki.o \
 
 $(MAMEOBJ)/irem.a: \
+	$(DRIVERS)/irem/m72.o $(AUDIO)/m72.o $(VIDEO)/m72.o \
 	$(DRIVERS)/irem/m92.o $(VIDEO)/m92.o \
 	$(MACHINE)/irem_cpu.o \
 
@@ -319,6 +325,20 @@ $(CPUOBJ)/mcs48/mcs48.o:	$(CPUSRC)/mcs48/mcs48.c \
 					$(CPUSRC)/mcs48/mcs48.h
 
 #-------------------------------------------------
+# Intel 8051 and derivatives
+#-------------------------------------------------
+
+ifneq ($(filter MCS51,$(CPUS)),)
+OBJDIRS += $(CPUOBJ)/mcs51
+CPUOBJS += $(CPUOBJ)/mcs51/mcs51.o
+DASMOBJS += $(CPUOBJ)/mcs51/mcs51dasm.o
+endif
+
+$(CPUOBJ)/mcs51/mcs51.o:	$(CPUSRC)/mcs51/mcs51.c \
+					$(CPUSRC)/mcs51/mcs51.h \
+						$(CPUSRC)/mcs51/mcs51ops.c
+
+#-------------------------------------------------
 # Motorola 68000 series
 #-------------------------------------------------
 
@@ -499,8 +519,16 @@ ifneq ($(filter DAC,$(SOUNDS)),)
 SOUNDOBJS += $(SOUNDOBJ)/dac.o
 endif
 
+ifneq ($(filter DMADAC,$(SOUNDS)),)
+SOUNDOBJS += $(SOUNDOBJ)/dmadac.o
+endif
+
 ifneq ($(filter SPEAKER,$(SOUNDS)),)
 SOUNDOBJS += $(SOUNDOBJ)/speaker.o
+endif
+
+ifneq ($(filter BEEP,$(SOUNDS)),)
+SOUNDOBJS += $(SOUNDOBJ)/beep.o
 endif
 
 #-------------------------------------------------
