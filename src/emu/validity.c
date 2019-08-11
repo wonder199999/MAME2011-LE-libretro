@@ -552,6 +552,10 @@ static bool validate_roms(int drivnum, const machine_config *config, region_arra
 				const char *ignore_names[] = {
 					"EP1.bin", "EP2.bin",	// NEOGEO 'Dragon's Heaven (unkneo)'
 					"KEN-D-H0-.IC55", "KEN-D-L0-.IC61", "KEN_B-4N-.IC23", "KEN_B-4P-.IC24", // IREM M72 'kengoa'
+					"AD_(M82)_A-H0-D.IC52", "AD_(M82)_A-L0-D.IC60", "AD_(M82)_A-H1-D.IC51", "AD_(M82)_A-L1-D.IC59",	/* IREM 'Airduel' */
+					"AD_(M82)_A-SP-D.IC15", "AD_(M82)_B-N0-D.IC44", "AD_(M82)_B-N1-D.IC45", "AD_(M82)_B-N2-D.IC46",
+					"AD_(M82)_B-N3-D.IC36", "AD_(M82)_A-C0-D.IC49", "AD_(M82)_A-C1-D.IC48", "AD_(M82)_A-C2-D.IC57",
+					"AD_(M82)_A-C3-D.IC56", "AD_(M82)_A-V0-D.IC12",	/* IREM 'Airduel' */
 					NULL
 				};
 
@@ -564,12 +568,12 @@ static bool validate_roms(int drivnum, const machine_config *config, region_arra
 						{
 							if (strcmp(last_name, ignore_names[i]) == 0)
 							{
-								i = 0x10000000;
+								i = 0x1000f000;
 								break;
 							}
 						}
 
-						if (i != 0x10000000)
+						if (i != 0x1000f000)
 						{
 							mame_printf_error("%s: %s has upper case ROM name %s\n", driver->source_file, driver->name, last_name);
 							error = true;
