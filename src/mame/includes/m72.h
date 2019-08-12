@@ -4,10 +4,54 @@
 
 *************************************************************************/
 
-/*----------- defined in video/m72.c -----------*/
+class m72_state : public driver_data_t
+{
+public:
+	static driver_data_t *alloc(running_machine &machine)
+	{
+		return auto_alloc_clear(&machine, m72_state(machine));
+	}
+	m72_state(running_machine &machine)
+			: driver_data_t(machine) { }
 
-extern UINT16 *m72_videoram1,*m72_videoram2,*majtitle_rowscrollram;
-extern UINT32 m72_raster_irq_position;
+	/* devices */
+	running_device	*maincpu;
+
+	/* memory pointers */
+	UINT16		*protection_ram;
+	const UINT8	*protection_code;
+	const UINT8	*protection_crc;
+	UINT8		*soundram;
+	UINT16		*spriteram;
+	UINT16		*videoram1;
+	UINT16		*videoram2;
+	UINT16		*majtitle_rowscrollram;
+
+	/* video-related */
+	emu_timer	*scanline_timer;
+	tilemap_t	*fg_tilemap;
+	tilemap_t	*bg_tilemap;
+	INT32		scrollx1;
+	INT32		scrollx2;
+	INT32		scrolly1;
+	INT32		scrolly2;
+	UINT8		irqvector;
+	UINT8		irq_base;
+	UINT32		raster_irq_position;
+	INT32		video_off;
+	int		majtitle_rowscroll;
+
+	/* misc */
+	UINT8		mcu_snd_cmd_latch;
+	UINT8		mcu_sample_latch;
+	UINT8		mcu_sample_addr;
+	int		prev[4];
+	int		diff[4];
+	UINT32		sample_addr;
+};
+
+
+/*----------- defined in video/m72.c -----------*/
 
 VIDEO_START( m72 );
 VIDEO_START( rtype2 );
@@ -17,6 +61,7 @@ VIDEO_START( poundfor );
 
 READ16_HANDLER( m72_palette1_r );
 READ16_HANDLER( m72_palette2_r );
+
 WRITE16_HANDLER( m72_palette1_w );
 WRITE16_HANDLER( m72_palette2_w );
 WRITE16_HANDLER( m72_videoram1_w );
