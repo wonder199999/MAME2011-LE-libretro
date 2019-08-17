@@ -1297,6 +1297,7 @@ const game_driver *const drivers[] =
 	DRIVER( dkgensan )	// Daiku no Gensan (Japan, M82)
 	DRIVER( dkgensanm72 )	// Daiku no Gensan (Japan, M72)
 	//
+	/* Poundfor is a trackball game，that isn't included in FBA02.97.38 romsets */
 	DRIVER( poundfor )	// Pound for Pound (World)
 	DRIVER( poundforj )	// Pound for Pound (Japan)
 	DRIVER( poundforu )	// Pound for Pound (US)

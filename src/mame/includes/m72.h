@@ -21,33 +21,33 @@ public:
 	UINT16		*protection_ram;
 	const UINT8	*protection_code;
 	const UINT8	*protection_crc;
-	UINT8		*soundram;
 	UINT16		*spriteram;
 	UINT16		*videoram1;
 	UINT16		*videoram2;
 	UINT16		*majtitle_rowscrollram;
+	UINT8		*soundram;
+	tilemap_t	*fg_tilemap;
+	tilemap_t	*bg_tilemap;
 
 	/* video-related */
 	emu_timer	*scanline_timer;
-	tilemap_t	*fg_tilemap;
-	tilemap_t	*bg_tilemap;
+	UINT32		raster_irq_position;
 	INT32		scrollx1;
 	INT32		scrollx2;
 	INT32		scrolly1;
 	INT32		scrolly2;
-	UINT8		irqvector;
-	UINT8		irq_base;
-	UINT32		raster_irq_position;
 	INT32		video_off;
-	int		majtitle_rowscroll;
+	INT32		majtitle_rowscroll;
 
 	/* misc */
 	UINT8		mcu_snd_cmd_latch;
 	UINT8		mcu_sample_latch;
 	UINT8		mcu_sample_addr;
-	int		prev[4];
-	int		diff[4];
+	UINT8		irqvector;
+	UINT8		irq_base;
 	UINT32		sample_addr;
+	INT32		prev[4];
+	INT32		diff[4];
 };
 
 

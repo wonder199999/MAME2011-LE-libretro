@@ -191,8 +191,8 @@ The protection device does
 
 static TIMER_CALLBACK( delayed_ram16_w )
 {
-	UINT16 val = ((UINT32) param) & 0xffff;
-	UINT16 offset = (((UINT32) param) >> 16) & 0xffff;
+	UINT16 val = ((UINT32)param) & 0xffff;
+	UINT16 offset = (((UINT32)param) >> 16) & 0xffff;
 	UINT16 *ram = (UINT16 *)ptr;
 
 	ram[offset] = val;
@@ -365,6 +365,19 @@ the NMI handler in the other games.
 
 ***************************************************************************/
 
+struct _sample_data
+{
+	const UINT16 bchopper[6];
+	const UINT16 nspirit[9];
+	const UINT16 loht[7];
+	const UINT16 xmultiplm72[3];
+	const UINT32 imgfight[7];
+	const UINT32 dbreedm72[9];
+	const UINT32 airduelm72[16];
+	const UINT32 dkgenm72[28];
+	const UINT32 gallop[31];
+};
+
 static INTERRUPT_GEN( fake_nmi )
 {
 	address_space *space = cpu_get_address_space(device, ADDRESS_SPACE_PROGRAM);
@@ -374,71 +387,86 @@ static INTERRUPT_GEN( fake_nmi )
 		m72_sample_w(device->machine->device("dac"), 0, sample);
 }
 
+static struct _sample_data sample_data = {
+	/* bchopper */
+	{ 0x0000, 0x0010, 0x2510, 0x6510, 0x8510, 0x9310 },
+	/* nspirit */
+	{ 0x0000, 0x0020, 0x2020, 0x0000, 0x5720, 0x0000, 0x7b60, 0x9b60, 0xc360 },
+	/* loht */
+	{ 0x0000, 0x0020, 0x0000, 0x2c40, 0x4320, 0x7120, 0xb200 },
+	/* xmultiplm72 */
+	{ 0x0000, 0x0020, 0x1a40 },
+	/* imgfight */
+	{ 0x0000, 0x0020, 0x44e0, 0x98a0, 0xc820, 0xf7a0, 0x108c0 },
+	/* dbreedm72 */
+	{ 0x00000, 0x00020, 0x02c40, 0x08160, 0x0c8c0, 0x0ffe0, 0x13000, 0x15820, 0x15f40 },
+	/* airduelm72 */
+	{ 0x00000, 0x00020, 0x03ec0, 0x05640, 0x06dc0, 0x083a0, 0x0c000, 0x0eb60,
+	  0x112e0, 0x13dc0, 0x16520, 0x16d60, 0x18ae0, 0x1a5a0, 0x1bf00, 0x1c340 },
+	/* dkgenm72 */
+	{ 0x00000, 0x00020, 0x01800, 0x02da0, 0x03be0, 0x05ae0, 0x06100, 0x06de0,
+	  0x07260, 0x07a60, 0x08720, 0x0a5c0, 0x0c3c0, 0x0c7a0, 0x0e140, 0x0fb00,
+	  0x10fa0, 0x10fc0, 0x10fe0, 0x11f40, 0x12b20, 0x130a0, 0x13c60, 0x14740,
+	  0x153c0, 0x197e0, 0x1af40, 0x1c080 },
+	/* gallop */
+	{ 0x00000, 0x00020, 0x00040, 0x01360, 0x02580, 0x04f20, 0x06240, 0x076e0,
+	  0x08660, 0x092a0, 0x09ba0, 0x0a560, 0x0cee0, 0x0de20, 0x0e620, 0x0f1c0,
+	  0x10200, 0x10220, 0x10240, 0x11380, 0x12760, 0x12780, 0x127a0, 0x13c40,
+	  0x140a0, 0x16760, 0x17e40, 0x18ee0, 0x19f60, 0x1bbc0, 0x1cee0 }
+};
 
 static WRITE16_HANDLER( bchopper_sample_trigger_w )
 {
-	static const int a[6] = { 0x0000, 0x0010, 0x2510, 0x6510, 0x8510, 0x9310 };
-	if (ACCESSING_BITS_0_7 && (data & 0xff) < 6) m72_set_sample_start(a[data & 0xff]);
+	if (ACCESSING_BITS_0_7 && (data & 0xff) < 6)
+		m72_set_sample_start(sample_data.bchopper[data & 0xff]);
 }
 
 static WRITE16_HANDLER( nspirit_sample_trigger_w )
 {
-	static const int a[9] = { 0x0000, 0x0020, 0x2020, 0, 0x5720, 0, 0x7b60, 0x9b60, 0xc360 };
-	if (ACCESSING_BITS_0_7 && (data & 0xff) < 9) m72_set_sample_start(a[data & 0xff]);
+	if (ACCESSING_BITS_0_7 && (data & 0xff) < 9)
+		m72_set_sample_start(sample_data.nspirit[data & 0xff]);
 }
 
 static WRITE16_HANDLER( imgfight_sample_trigger_w )
 {
-	static const int a[7] = { 0x0000, 0x0020, 0x44e0, 0x98a0, 0xc820, 0xf7a0, 0x108c0 };
-	if (ACCESSING_BITS_0_7 && (data & 0xff) < 7) m72_set_sample_start(a[data & 0xff]);
+	if (ACCESSING_BITS_0_7 && (data & 0xff) < 7)
+		m72_set_sample_start(sample_data.imgfight[data & 0xff]);
 }
 
 static WRITE16_HANDLER( loht_sample_trigger_w )
 {
-	static const int a[7] = { 0x0000, 0x0020, 0, 0x2c40, 0x4320, 0x7120, 0xb200 };
-	if (ACCESSING_BITS_0_7 && (data & 0xff) < 7) m72_set_sample_start(a[data & 0xff]);
+	if (ACCESSING_BITS_0_7 && (data & 0xff) < 7)
+		m72_set_sample_start(sample_data.loht[data & 0xff]);
 }
 
 static WRITE16_HANDLER( xmultiplm72_sample_trigger_w )
 {
-	static const int a[3] = { 0x0000, 0x0020, 0x1a40 };
-	if (ACCESSING_BITS_0_7 && (data & 0xff) < 3) m72_set_sample_start(a[data & 0xff]);
+	if (ACCESSING_BITS_0_7 && (data & 0xff) < 3)
+		m72_set_sample_start(sample_data.xmultiplm72[data & 0xff]);
 }
 
 static WRITE16_HANDLER( dbreedm72_sample_trigger_w )
 {
-	static const int a[9] = { 0x00000, 0x00020, 0x02c40, 0x08160, 0x0c8c0, 0x0ffe0, 0x13000, 0x15820, 0x15f40 };
-	if (ACCESSING_BITS_0_7 && (data & 0xff) < 9) m72_set_sample_start(a[data & 0xff]);
+	if (ACCESSING_BITS_0_7 && (data & 0xff) < 9)
+		m72_set_sample_start(sample_data.dbreedm72[data & 0xff]);
 }
 
 static WRITE16_HANDLER( airduelm72_sample_trigger_w )
 {
-	static const int a[16] = {
-		0x00000, 0x00020, 0x03ec0, 0x05640, 0x06dc0, 0x083a0, 0x0c000, 0x0eb60,
-		0x112e0, 0x13dc0, 0x16520, 0x16d60, 0x18ae0, 0x1a5a0, 0x1bf00, 0x1c340 };
-	if (ACCESSING_BITS_0_7 && (data & 0xff) < 16) m72_set_sample_start(a[data & 0xff]);
+	if (ACCESSING_BITS_0_7 && (data & 0xff) < 16)
+		m72_set_sample_start(sample_data.airduelm72[data & 0xff]);
 }
 
 static WRITE16_HANDLER( dkgenm72_sample_trigger_w )
 {
-	static const int a[28] = {
-		0x00000, 0x00020, 0x01800, 0x02da0, 0x03be0, 0x05ae0, 0x06100, 0x06de0,
-		0x07260, 0x07a60, 0x08720, 0x0a5c0, 0x0c3c0, 0x0c7a0, 0x0e140, 0x0fb00,
-		0x10fa0, 0x10fc0, 0x10fe0, 0x11f40, 0x12b20, 0x130a0, 0x13c60, 0x14740,
-		0x153c0, 0x197e0, 0x1af40, 0x1c080 };
-
-	if (ACCESSING_BITS_0_7 && (data & 0xff) < 28) m72_set_sample_start(a[data & 0xff]);
+	if (ACCESSING_BITS_0_7 && (data & 0xff) < 28)
+		m72_set_sample_start(sample_data.dkgenm72[data & 0xff]);
 }
 
 static WRITE16_HANDLER( gallop_sample_trigger_w )
 {
-	static const int a[31] = {
-		0x00000, 0x00020, 0x00040, 0x01360, 0x02580, 0x04f20, 0x06240, 0x076e0,
-		0x08660, 0x092a0, 0x09ba0, 0x0a560, 0x0cee0, 0x0de20, 0x0e620, 0x0f1c0,
-		0x10200, 0x10220, 0x10240, 0x11380, 0x12760, 0x12780, 0x127a0, 0x13c40,
-		0x140a0, 0x16760, 0x17e40, 0x18ee0, 0x19f60, 0x1bbc0, 0x1cee0 };
-
-	if (ACCESSING_BITS_0_7 && (data & 0xff) < 31) m72_set_sample_start(a[data & 0xff]);
+	if (ACCESSING_BITS_0_7 && (data & 0xff) < 31)
+		m72_set_sample_start(sample_data.gallop[data & 0xff]);
 }
 
 
@@ -477,22 +505,22 @@ running, but they have not been derived from the real 8751 code.
 
 /* Battle Chopper / Mr. Heli */
 static const UINT8 bchopper_code[CODE_LEN] = {
-	0x68,0x00,0xa0,				// push 0a000h
-	0x1f,						// pop ds
+	0x68,0x00,0xa0,			// push 0a000h
+	0x1f,				// pop ds
 	0xc6,0x06,0x38,0x38,0x53,	// mov [3838h], byte 053h
 	0xc6,0x06,0x3a,0x38,0x41,	// mov [383ah], byte 041h
 	0xc6,0x06,0x3c,0x38,0x4d,	// mov [383ch], byte 04dh
 	0xc6,0x06,0x3e,0x38,0x4f,	// mov [383eh], byte 04fh
 	0xc6,0x06,0x40,0x38,0x54,	// mov [3840h], byte 054h
 	0xc6,0x06,0x42,0x38,0x4f,	// mov [3842h], byte 04fh
-	0x68,0x00,0xb0,				// push 0b000h
-	0x1f,						// pop ds
+	0x68,0x00,0xb0,			// push 0b000h
+	0x1f,				// pop ds
 	0xc6,0x06,0x00,0x09,0x49^0xff,	// mov [0900h], byte 049h
 	0xc6,0x06,0x00,0x0a,0x49^0xff,	// mov [0a00h], byte 049h
 	0xc6,0x06,0x00,0x0b,0x49^0xff,	// mov [0b00h], byte 049h
 	0xc6,0x06,0x00,0x00,0xcb^0xff,	// mov [0000h], byte 0cbh ; retf : bypass protection check during the game
-	0x68,0x00,0xd0,				// push 0d000h
-	0x1f,						// pop ds
+	0x68,0x00,0xd0,			// push 0d000h
+	0x1f,				// pop ds
 	// the following is for mrheli only, the game checks for
 	// "This game can only be played in Japan..." message in the video text buffer
 	// the message is nowhere to be found in the ROMs, so has to be displayed by the mcu
@@ -511,21 +539,21 @@ static const UINT8 mrheli_crc[CRC_LEN] = {
 
 /* Ninja Spirit */
 static const UINT8 nspirit_code[CODE_LEN] = {
-	0x68,0x00,0xa0,				// push 0a000h
-	0x1f,						// pop ds
+	0x68,0x00,0xa0,			// push 0a000h
+	0x1f,				// pop ds
 	0xc6,0x06,0x38,0x38,0x4e,	// mov [3838h], byte 04eh
 	0xc6,0x06,0x3a,0x38,0x49,	// mov [383ah], byte 049h
 	0xc6,0x06,0x3c,0x38,0x4e,	// mov [383ch], byte 04eh
 	0xc6,0x06,0x3e,0x38,0x44,	// mov [383eh], byte 044h
 	0xc6,0x06,0x40,0x38,0x4f,	// mov [3840h], byte 04fh
 	0xc6,0x06,0x42,0x38,0x55,	// mov [3842h], byte 055h
-	0x68,0x00,0xb0,				// push 0b000h
-	0x1f,						// pop ds
+	0x68,0x00,0xb0,			// push 0b000h
+	0x1f,				// pop ds
 	0xc6,0x06,0x00,0x09,0x49^0xff,	// mov [0900h], byte 049h
 	0xc6,0x06,0x00,0x0a,0x49^0xff,	// mov [0a00h], byte 049h
 	0xc6,0x06,0x00,0x0b,0x49^0xff,	// mov [0b00h], byte 049h
-	0x68,0x00,0xd0,				// push 0d000h
-	0x1f,						// pop ds
+	0x68,0x00,0xd0,			// push 0d000h
+	0x1f,				// pop ds
 	// the following is for nspiritj only, the game checks for
 	// "This game can only be played in Japan..." message in the video text buffer
 	// the message is nowhere to be found in the ROMs, so has to be displayed by the mcu
@@ -546,16 +574,16 @@ static const UINT8 nspiritj_crc[CRC_LEN] = {
 
 /* Image Fight */
 static const UINT8 imgfight_code[CODE_LEN] = {
-	0x68,0x00,0xa0,				// push 0a000h
-	0x1f,						// pop ds
+	0x68,0x00,0xa0,			// push 0a000h
+	0x1f,				// pop ds
 	0xc6,0x06,0x38,0x38,0x50,	// mov [3838h], byte 050h
 	0xc6,0x06,0x3a,0x38,0x49,	// mov [383ah], byte 049h
 	0xc6,0x06,0x3c,0x38,0x43,	// mov [383ch], byte 043h
 	0xc6,0x06,0x3e,0x38,0x4b,	// mov [383eh], byte 04bh
 	0xc6,0x06,0x40,0x38,0x45,	// mov [3840h], byte 045h
 	0xc6,0x06,0x42,0x38,0x54,	// mov [3842h], byte 054h
-	0x68,0x00,0xb0,				// push 0b000h
-	0x1f,						// pop ds
+	0x68,0x00,0xb0,			// push 0b000h
+	0x1f,				// pop ds
 	0xc6,0x06,0x00,0x09,0x49^0xff,	// mov [0900h], byte 049h
 	0xc6,0x06,0x00,0x0a,0x49^0xff,	// mov [0a00h], byte 049h
 	0xc6,0x06,0x00,0x0b,0x49^0xff,	// mov [0b00h], byte 049h
@@ -563,8 +591,8 @@ static const UINT8 imgfight_code[CODE_LEN] = {
 	0xc6,0x06,0x21,0x09,0x4d^0xff,	// mov [0921h], byte 04dh
 	0xc6,0x06,0x22,0x09,0x41^0xff,	// mov [0922h], byte 041h
 	0xc6,0x06,0x23,0x09,0x47^0xff,	// mov [0923h], byte 047h
-	0x68,0x00,0xd0,				// push 0d000h
-	0x1f,						// pop ds
+	0x68,0x00,0xd0,			// push 0d000h
+	0x1f,				// pop ds
 	// the game checks for
 	// "This game can only be played in Japan..." message in the video text buffer
 	// the message is nowhere to be found in the ROMs, so has to be displayed by the mcu
@@ -579,24 +607,21 @@ static const UINT8 imgfight_crc[CRC_LEN] = {
 /* Legend of Hero Tonma */
 static const UINT8 loht_code[CODE_LEN] =
 {
-	0x68,0x00,0xa0,				// push 0a000h
-	0x1f,						// pop ds
+	0x68,0x00,0xa0,			// push 0a000h
+	0x1f,				// pop ds
 	0xc6,0x06,0x3c,0x38,0x47,	// mov [383ch], byte 047h
 	0xc6,0x06,0x3d,0x38,0x47,	// mov [383dh], byte 047h
 	0xc6,0x06,0x42,0x38,0x44,	// mov [3842h], byte 044h
 	0xc6,0x06,0x43,0x38,0x44,	// mov [3843h], byte 044h
-	0x68,0x00,0xb0,				// push 0b000h
-	0x1f,						// pop ds
+	0x68,0x00,0xb0,			// push 0b000h
+	0x1f,				// pop ds
 	0xc6,0x06,0x00,0x09,0x49^0xff,	// mov [0900h], byte 049h
 	0xc6,0x06,0x00,0x0a,0x49^0xff,	// mov [0a00h], byte 049h
 	0xc6,0x06,0x00,0x0b,0x49^0xff,	// mov [0b00h], byte 049h
-
-	0x68,0x00,0xd0,				    // push 0d000h // Japan set only
-	0x1f,						    // pop ds // Japan set only
-	0xc6,0x06,0x70,0x16,0x57,		// mov [1670h], byte 057h // Japan set only - checks this (W) of WARNING
-
+	0x68,0x00,0xd0,			// push 0d000h // Japan set only
+	0x1f,				// pop ds // Japan set only
+	0xc6,0x06,0x70,0x16,0x57,	// mov [1670h], byte 057h // Japan set only - checks this (W) of WARNING
 	0xea,0x5d,0x01,0x40,0x00	// jmp  0040:$015d
-
 };
 
 static const UINT8 loht_crc[CRC_LEN] = {
@@ -628,8 +653,8 @@ static const UINT8 dbreedm72_crc[CRC_LEN] = {
 
 /* Air Duel */
 static const UINT8 airduelm72_code[CODE_LEN] = {
-	0x68,0x00,0xd0,				// push 0d000h
-	0x1f,					// pop ds
+	0x68,0x00,0xd0,			// push 0d000h
+	0x1f,				// pop ds
 	// the game checks for
 	// "This game can only be played in Japan..." message in the video text buffer
 	// the message is nowhere to be found in the ROMs, so has to be displayed by the mcu
@@ -682,7 +707,7 @@ static WRITE16_HANDLER( protection_w )
 			copy_le(&state->protection_ram[0x0fe0], state->protection_crc, CRC_LEN);
 }
 
-static void install_protection_handler( running_machine *machine, const UINT8 *code,const UINT8 *crc )
+static void install_protection_handler( running_machine *machine, const UINT8 *code, const UINT8 *crc )
 {
 	m72_state *state = machine->driver_data<m72_state>();
 
@@ -1000,12 +1025,10 @@ static ADDRESS_MAP_START( m72_portmap, ADDRESS_SPACE_IO, 16 )
 	AM_RANGE(0x02, 0x03) AM_WRITE(m72_port02_w)	/* coin counters, reset sound cpu, other stuff? */
 	AM_RANGE(0x04, 0x05) AM_WRITE(m72_dmaon_w)
 	AM_RANGE(0x06, 0x07) AM_WRITE(m72_irq_line_w)
-	//AM_RANGE(0x40, 0x43) AM_WRITENOP /* Interrupt controller, only written to at bootup */
 	AM_RANGE(0x80, 0x81) AM_WRITE(m72_scrolly1_w)
 	AM_RANGE(0x82, 0x83) AM_WRITE(m72_scrollx1_w)
 	AM_RANGE(0x84, 0x85) AM_WRITE(m72_scrolly2_w)
 	AM_RANGE(0x86, 0x87) AM_WRITE(m72_scrollx2_w)
-/*  { 0xc0, 0xc0      trigger sample, filled by init_ function */
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( rtype2_portmap, ADDRESS_SPACE_IO, 16 )
@@ -1014,7 +1037,7 @@ static ADDRESS_MAP_START( rtype2_portmap, ADDRESS_SPACE_IO, 16 )
 	AM_RANGE(0x04, 0x05) AM_READ_PORT("DSW")
 	AM_RANGE(0x00, 0x01) AM_WRITE(m72_sound_command_w)
 	AM_RANGE(0x02, 0x03) AM_WRITE(rtype2_port02_w)
-	AM_RANGE(0x40, 0x43) AM_WRITENOP /* Interrupt controller, only written to at bootup */
+	AM_RANGE(0x40, 0x43) AM_WRITENOP	/* Interrupt controller, only written to at bootup */
 	AM_RANGE(0x80, 0x81) AM_WRITE(m72_scrolly1_w)
 	AM_RANGE(0x82, 0x83) AM_WRITE(m72_scrollx1_w)
 	AM_RANGE(0x84, 0x85) AM_WRITE(m72_scrolly2_w)
@@ -1027,7 +1050,7 @@ static ADDRESS_MAP_START( poundfor_portmap, ADDRESS_SPACE_IO, 16 )
 	AM_RANGE(0x08, 0x0f) AM_READ(poundfor_trackball_r)
 	AM_RANGE(0x00, 0x01) AM_WRITE(m72_sound_command_w)
 	AM_RANGE(0x02, 0x03) AM_WRITE(rtype2_port02_w)
-	AM_RANGE(0x40, 0x43) AM_WRITENOP /* Interrupt controller, only written to at bootup */
+	AM_RANGE(0x40, 0x43) AM_WRITENOP	/* Interrupt controller, only written to at bootup */
 	AM_RANGE(0x80, 0x81) AM_WRITE(m72_scrolly1_w)
 	AM_RANGE(0x82, 0x83) AM_WRITE(m72_scrollx1_w)
 	AM_RANGE(0x84, 0x85) AM_WRITE(m72_scrolly2_w)
@@ -1040,7 +1063,7 @@ static ADDRESS_MAP_START( majtitle_portmap, ADDRESS_SPACE_IO, 16 )
 	AM_RANGE(0x04, 0x05) AM_READ_PORT("DSW")
 	AM_RANGE(0x00, 0x01) AM_WRITE(m72_sound_command_w)
 	AM_RANGE(0x02, 0x03) AM_WRITE(rtype2_port02_w)
-	AM_RANGE(0x40, 0x43) AM_WRITENOP /* Interrupt controller, only written to at bootup */
+	AM_RANGE(0x40, 0x43) AM_WRITENOP	/* Interrupt controller, only written to at bootup */
 	AM_RANGE(0x80, 0x81) AM_WRITE(m72_scrolly1_w)
 	AM_RANGE(0x82, 0x83) AM_WRITE(m72_scrollx1_w)
 	AM_RANGE(0x84, 0x85) AM_WRITE(m72_scrolly2_w)
@@ -1056,7 +1079,7 @@ static ADDRESS_MAP_START( hharry_portmap, ADDRESS_SPACE_IO, 16 )
 	AM_RANGE(0x02, 0x03) AM_WRITE(rtype2_port02_w)	/* coin counters, reset sound cpu, other stuff? */
 	AM_RANGE(0x04, 0x05) AM_WRITE(m72_dmaon_w)
 	AM_RANGE(0x06, 0x07) AM_WRITE(m72_irq_line_w)
-	AM_RANGE(0x40, 0x43) AM_WRITENOP /* Interrupt controller, only written to at bootup */
+	AM_RANGE(0x40, 0x43) AM_WRITENOP	/* Interrupt controller, only written to at bootup */
 	AM_RANGE(0x80, 0x81) AM_WRITE(m72_scrolly1_w)
 	AM_RANGE(0x82, 0x83) AM_WRITE(m72_scrollx1_w)
 	AM_RANGE(0x84, 0x85) AM_WRITE(m72_scrolly2_w)
@@ -1073,7 +1096,6 @@ static ADDRESS_MAP_START( kengo_portmap, ADDRESS_SPACE_IO, 16 )
 	AM_RANGE(0x82, 0x83) AM_WRITE(m72_scrollx1_w)
 	AM_RANGE(0x84, 0x85) AM_WRITE(m72_scrolly2_w)
 	AM_RANGE(0x86, 0x87) AM_WRITE(m72_scrollx2_w)
-//  AM_RANGE(0x8c, 0x8f) AM_WRITENOP    /* ??? */
 ADDRESS_MAP_END
 
 
@@ -1111,7 +1133,6 @@ static ADDRESS_MAP_START( rtype2_sound_portmap, ADDRESS_SPACE_IO, 8 )
 	AM_RANGE(0x82, 0x82) AM_DEVWRITE("dac", m72_sample_w)
 	AM_RANGE(0x83, 0x83) AM_WRITE(m72_sound_irq_ack_w)
 	AM_RANGE(0x84, 0x84) AM_READ(m72_sample_r)
-//  AM_RANGE(0x87, 0x87) AM_WRITENOP    /* ??? */
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( poundfor_sound_portmap, ADDRESS_SPACE_IO, 8 )
@@ -1581,11 +1602,11 @@ INPUT_PORTS_END
 
 static INPUT_PORTS_START( poundfor )
 	PORT_START("IN0")
-	PORT_BIT( 0x001f, IP_ACTIVE_HIGH, IPT_SPECIAL )	/* high bits of trackball X */
+	PORT_BIT( 0x001f, IP_ACTIVE_HIGH, IPT_SPECIAL )	// high bits of trackball X
 	PORT_BIT( 0x0020, IP_ACTIVE_HIGH, IPT_BUTTON2 ) PORT_PLAYER(1)
 	PORT_BIT( 0x0040, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_PLAYER(1)
 	PORT_BIT( 0x0080, IP_ACTIVE_HIGH, IPT_UNKNOWN )
-	PORT_BIT( 0x1f00, IP_ACTIVE_HIGH, IPT_SPECIAL )	/* high bits of trackball X */
+	PORT_BIT( 0x1f00, IP_ACTIVE_HIGH, IPT_SPECIAL )	// high bits of trackball X
 	PORT_BIT( 0x2000, IP_ACTIVE_HIGH, IPT_BUTTON2 ) PORT_PLAYER(2)
 	PORT_BIT( 0x4000, IP_ACTIVE_HIGH, IPT_BUTTON1 ) PORT_PLAYER(2)
 	PORT_BIT( 0x8000, IP_ACTIVE_HIGH, IPT_UNKNOWN )
@@ -1596,9 +1617,9 @@ static INPUT_PORTS_START( poundfor )
 	PORT_BIT( 0x0004, IP_ACTIVE_LOW, IPT_COIN1 )
 	PORT_BIT( 0x0008, IP_ACTIVE_LOW, IPT_COIN2 )
 	PORT_BIT( 0x0010, IP_ACTIVE_LOW, IPT_SERVICE1 )
-	PORT_BIT( 0x0020, IP_ACTIVE_LOW, IPT_SERVICE ) /* 0x0020 is another test mode */
+	PORT_BIT( 0x0020, IP_ACTIVE_LOW, IPT_SERVICE )	// 0x0020 is another test mode
 	PORT_BIT( 0x0040, IP_ACTIVE_LOW, IPT_UNUSED )
-	PORT_BIT( 0x0080, IP_ACTIVE_LOW, IPT_SPECIAL )	/* sprite DMA complete */
+	PORT_BIT( 0x0080, IP_ACTIVE_LOW, IPT_SPECIAL )	// sprite DMA complete
 	PORT_BIT( 0xff00, IP_ACTIVE_LOW, IPT_UNKNOWN )
 
 	PORT_START("DSW")
@@ -1633,7 +1654,7 @@ static INPUT_PORTS_START( poundfor )
 	PORT_DIPNAME( 0x0800, 0x0800, "Coin Mode" ) PORT_DIPLOCATION("SW2:4")
 	PORT_DIPSETTING(      0x0800, "Mode 1" )
 	PORT_DIPSETTING(      0x0000, "Mode 2" )
-	/* Coin Mode 1 */
+	// Coin Mode 1
 	PORT_DIPNAME( 0xf000, 0xf000, DEF_STR( Coinage ) ) PORT_CONDITION("DSW", 0x0800, PORTCOND_NOTEQUALS, 0x0000) PORT_DIPLOCATION("SW2:5,6,7,8")
 	PORT_DIPSETTING(      0xa000, DEF_STR( 6C_1C ) )
 	PORT_DIPSETTING(      0xb000, DEF_STR( 5C_1C ) )
@@ -1651,7 +1672,7 @@ static INPUT_PORTS_START( poundfor )
 	PORT_DIPSETTING(      0x6000, DEF_STR( 1C_5C ) )
 	PORT_DIPSETTING(      0x5000, DEF_STR( 1C_6C ) )
 	PORT_DIPSETTING(      0x0000, DEF_STR( Free_Play ) )
-	/* Coin Mode 2 */
+	// Coin Mode 2
 	IREM_COIN_MODE_2_HIGH
 
 	PORT_START("TRACK0_X")
@@ -1701,7 +1722,6 @@ static INPUT_PORTS_START( airduel )
 	PORT_DIPSETTING(      0xb000, DEF_STR( 5C_1C ) )
 	PORT_DIPSETTING(      0xc000, DEF_STR( 4C_1C ) )
 	PORT_DIPSETTING(      0xd000, DEF_STR( 3C_1C ) )
-//  PORT_DIPSETTING(      0x1000, DEF_STR( Free-Play ) )  /* another free play */
 	PORT_DIPSETTING(      0xe000, DEF_STR( 2C_1C ) )
 	PORT_DIPSETTING(      0x3000, DEF_STR( 3C_2C ) )
 	PORT_DIPSETTING(      0x2000, DEF_STR( 4C_3C ) )
@@ -1792,6 +1812,29 @@ static INPUT_PORTS_START( kengo )
 INPUT_PORTS_END
 
 
+#if 0
+static const gfx_layout tilelayout =
+{
+	8,8,			/* 8*8 characters */
+	RGN_FRAC(1,4),		/* NUM characters */
+	4,			/* 4 bits per pixel */
+	{ RGN_FRAC(3,4), RGN_FRAC(2,4), RGN_FRAC(1,4), RGN_FRAC(0,4) },
+	{ STEP8(0, 1) },
+	{ STEP8(0, 8) },
+	8*8			/* every char takes 8 consecutive bytes */
+};
+
+static const gfx_layout spritelayout =
+{
+	16,16,			/* 16*16 sprites */
+	RGN_FRAC(1,4),		/* NUM characters */
+	4,			/* 4 bits per pixel */
+	{ RGN_FRAC(3,4), RGN_FRAC(2,4), RGN_FRAC(1,4), RGN_FRAC(0,4) },
+	{ STEP8(0, 1), STEP8((16*8+0), 1) },
+	{ STEP16(0, 8) },
+	32*8			/* every sprite takes 32 consecutive bytes */
+};
+#endif
 
 static const gfx_layout tilelayout =
 {
@@ -1816,6 +1859,7 @@ static const gfx_layout spritelayout =
 			8*8, 9*8, 10*8, 11*8, 12*8, 13*8, 14*8, 15*8 },
 	32*8			/* every sprite takes 32 consecutive bytes */
 };
+
 
 static GFXDECODE_START( m72 )
 	GFXDECODE_ENTRY( "gfx1", 0, spritelayout,    0, 16 )
@@ -2194,27 +2238,27 @@ MACHINE_DRIVER_END
 static MACHINE_DRIVER_START( poundfor )
 	MDRV_DRIVER_DATA(m72_state)
 
-	/* basic machine hardware */
-	MDRV_CPU_ADD("maincpu", V30, MASTER_CLOCK/2/2)	/* 16 MHz external freq (8MHz internal) */
+	// basic machine hardware
+	MDRV_CPU_ADD("maincpu", V30, MASTER_CLOCK/2/2)	// 16 MHz external freq (8MHz internal)
 	MDRV_CPU_PROGRAM_MAP(rtype2_map)
 	MDRV_CPU_IO_MAP(poundfor_portmap)
 	MDRV_CPU_ADD("soundcpu", Z80, SOUND_CLOCK)
 	MDRV_CPU_PROGRAM_MAP(sound_rom_map)
 	MDRV_CPU_IO_MAP(poundfor_sound_portmap)
-	MDRV_CPU_VBLANK_INT_HACK(fake_nmi, 128)	/* clocked by V1? (Vigilante) */
-						/* IRQs are generated by main Z80 and YM2151 */
+	MDRV_CPU_VBLANK_INT_HACK(fake_nmi, 128)		// clocked by V1? (Vigilante)
+						// IRQs are generated by main Z80 and YM2151
 	MDRV_MACHINE_START(m72)
 	MDRV_MACHINE_RESET(m72)
 	MDRV_SOUND_START(m72)
 	MDRV_SOUND_RESET(m72)
 
-	/* video hardware */
+	// video hardware
 	MDRV_GFXDECODE(rtype2)
 	M72_VIDEO_PARAMS
 	MDRV_VIDEO_START(poundfor)
 	MDRV_VIDEO_UPDATE(m72)
 
-	/* sound hardware */
+	// sound hardware
 	M72_AUDIOCHIPS_WITH_DAC
 MACHINE_DRIVER_END
 
@@ -2253,7 +2297,7 @@ static MACHINE_DRIVER_START( kengo )
 MACHINE_DRIVER_END
 
 #undef M72_AUDIOCHIPS_WITH_DAC
-#undef M72_AUDIOCHIPS_DAC
+#undef M72_AUDIOCHIPS
 #undef M72_VIDEO_PARAMS
 
 /***************************************************************************
@@ -3328,18 +3372,18 @@ ROM_START( poundfor )	// "Pound for Pound (World)"
 	ROM_LOAD( "ppa-sp.4j",    0x00000, 0x10000, CRC(3f458a5b) SHA1(d73740b2a548bf8a895909da0841f18d9ed32668) )
 
 	ROM_REGION( 0x100000, "gfx1", 0 )
-	ROM_LOAD( "ppb-n0.bin",   0x00000, 0x40000, CRC(951a41f8) SHA1(59b64f63ea2452c2b42ff7ebf1ff6fc4e7879ce3) )	/* sprites */
+	ROM_LOAD( "ppb-n0.bin",   0x00000, 0x40000, CRC(951a41f8) SHA1(59b64f63ea2452c2b42ff7ebf1ff6fc4e7879ce3) )	// sprites
 	ROM_LOAD( "ppb-n1.bin",   0x40000, 0x40000, CRC(c609b7f2) SHA1(1da3550c7e4d2a26d75d143934680d9177ba5c35) )
 	ROM_LOAD( "ppb-n2.bin",   0x80000, 0x40000, CRC(318c0b5f) SHA1(1d4cd17dc2f8fc4e523eaf679f21d83e1bfade4e) )
 	ROM_LOAD( "ppb-n3.bin",   0xc0000, 0x40000, CRC(93dc9490) SHA1(3df4d57a7bf19443f5aa6a416bcee968f81d9059) )
 
 	ROM_REGION( 0x080000, "gfx2", 0 )
-	ROM_LOAD( "ppa-g00.bin",  0x00000, 0x20000, CRC(8a88a174) SHA1(d360b9014aec31960538ee488894496248a820dc) )	/* tiles */
+	ROM_LOAD( "ppa-g00.bin",  0x00000, 0x20000, CRC(8a88a174) SHA1(d360b9014aec31960538ee488894496248a820dc) )	// tiles
 	ROM_LOAD( "ppa-g10.bin",  0x20000, 0x20000, CRC(e48a66ac) SHA1(49b33db6a922d6f1d1417e28714a67431b7c0217) )
 	ROM_LOAD( "ppa-g20.bin",  0x40000, 0x20000, CRC(12b93e79) SHA1(f3d2b76a30874827c8998c1d13a55a3990b699b7) )
 	ROM_LOAD( "ppa-g30.bin",  0x60000, 0x20000, CRC(faa39aee) SHA1(9cc1a468b304437766c04189054d3b8f7ff1f958) )
 
-	ROM_REGION( 0x40000, "samples", 0 )	/* samples */
+	ROM_REGION( 0x40000, "samples", 0 )	// samples
 	ROM_LOAD( "ppa-v0.bin",   0x00000, 0x40000, CRC(03321664) SHA1(51f2b2b712385c1cd55fd069829efac01838d603) )
 ROM_END
 
@@ -3356,18 +3400,18 @@ ROM_START( poundforj )	// "Pound for Pound (Japan)"
 	ROM_LOAD( "ppa-sp.4j",    0x00000, 0x10000, CRC(3f458a5b) SHA1(d73740b2a548bf8a895909da0841f18d9ed32668) )
 
 	ROM_REGION( 0x100000, "gfx1", 0 )
-	ROM_LOAD( "ppb-n0.bin",   0x00000, 0x40000, CRC(951a41f8) SHA1(59b64f63ea2452c2b42ff7ebf1ff6fc4e7879ce3) )	/* sprites */
+	ROM_LOAD( "ppb-n0.bin",   0x00000, 0x40000, CRC(951a41f8) SHA1(59b64f63ea2452c2b42ff7ebf1ff6fc4e7879ce3) )	// sprites
 	ROM_LOAD( "ppb-n1.bin",   0x40000, 0x40000, CRC(c609b7f2) SHA1(1da3550c7e4d2a26d75d143934680d9177ba5c35) )
 	ROM_LOAD( "ppb-n2.bin",   0x80000, 0x40000, CRC(318c0b5f) SHA1(1d4cd17dc2f8fc4e523eaf679f21d83e1bfade4e) )
 	ROM_LOAD( "ppb-n3.bin",   0xc0000, 0x40000, CRC(93dc9490) SHA1(3df4d57a7bf19443f5aa6a416bcee968f81d9059) )
 
 	ROM_REGION( 0x080000, "gfx2", 0 )
-	ROM_LOAD( "ppa-g00.bin",  0x00000, 0x20000, CRC(8a88a174) SHA1(d360b9014aec31960538ee488894496248a820dc) )	/* tiles */
+	ROM_LOAD( "ppa-g00.bin",  0x00000, 0x20000, CRC(8a88a174) SHA1(d360b9014aec31960538ee488894496248a820dc) )	// tiles
 	ROM_LOAD( "ppa-g10.bin",  0x20000, 0x20000, CRC(e48a66ac) SHA1(49b33db6a922d6f1d1417e28714a67431b7c0217) )
 	ROM_LOAD( "ppa-g20.bin",  0x40000, 0x20000, CRC(12b93e79) SHA1(f3d2b76a30874827c8998c1d13a55a3990b699b7) )
 	ROM_LOAD( "ppa-g30.bin",  0x60000, 0x20000, CRC(faa39aee) SHA1(9cc1a468b304437766c04189054d3b8f7ff1f958) )
 
-	ROM_REGION( 0x40000, "samples", 0 )	/* samples */
+	ROM_REGION( 0x40000, "samples", 0 )	// samples
 	ROM_LOAD( "ppa-v0.bin",   0x00000, 0x40000, CRC(03321664) SHA1(51f2b2b712385c1cd55fd069829efac01838d603) )
 ROM_END
 
@@ -3384,18 +3428,18 @@ ROM_START( poundforu )	// "Pound for Pound (US)"
 	ROM_LOAD( "ppa-sp.4j",    0x00000, 0x10000, CRC(3f458a5b) SHA1(d73740b2a548bf8a895909da0841f18d9ed32668) )
 
 	ROM_REGION( 0x100000, "gfx1", 0 )
-	ROM_LOAD( "ppb-n0.bin",   0x00000, 0x40000, CRC(951a41f8) SHA1(59b64f63ea2452c2b42ff7ebf1ff6fc4e7879ce3) )	/* sprites */
+	ROM_LOAD( "ppb-n0.bin",   0x00000, 0x40000, CRC(951a41f8) SHA1(59b64f63ea2452c2b42ff7ebf1ff6fc4e7879ce3) )	// sprites
 	ROM_LOAD( "ppb-n1.bin",   0x40000, 0x40000, CRC(c609b7f2) SHA1(1da3550c7e4d2a26d75d143934680d9177ba5c35) )
 	ROM_LOAD( "ppb-n2.bin",   0x80000, 0x40000, CRC(318c0b5f) SHA1(1d4cd17dc2f8fc4e523eaf679f21d83e1bfade4e) )
 	ROM_LOAD( "ppb-n3.bin",   0xc0000, 0x40000, CRC(93dc9490) SHA1(3df4d57a7bf19443f5aa6a416bcee968f81d9059) )
 
 	ROM_REGION( 0x080000, "gfx2", 0 )
-	ROM_LOAD( "ppa-g00.bin",  0x00000, 0x20000, CRC(8a88a174) SHA1(d360b9014aec31960538ee488894496248a820dc) )	/* tiles */
+	ROM_LOAD( "ppa-g00.bin",  0x00000, 0x20000, CRC(8a88a174) SHA1(d360b9014aec31960538ee488894496248a820dc) )	// tiles
 	ROM_LOAD( "ppa-g10.bin",  0x20000, 0x20000, CRC(e48a66ac) SHA1(49b33db6a922d6f1d1417e28714a67431b7c0217) )
 	ROM_LOAD( "ppa-g20.bin",  0x40000, 0x20000, CRC(12b93e79) SHA1(f3d2b76a30874827c8998c1d13a55a3990b699b7) )
 	ROM_LOAD( "ppa-g30.bin",  0x60000, 0x20000, CRC(faa39aee) SHA1(9cc1a468b304437766c04189054d3b8f7ff1f958) )
 
-	ROM_REGION( 0x40000, "samples", 0 )	/* samples */
+	ROM_REGION( 0x40000, "samples", 0 )	// samples
 	ROM_LOAD( "ppa-v0.bin",   0x00000, 0x40000, CRC(03321664) SHA1(51f2b2b712385c1cd55fd069829efac01838d603) )
 ROM_END
 
@@ -3604,63 +3648,52 @@ ROM_END
 /* ************************************************************************************************************ */
 /*    YEAR   NAME	PARENT	       MACHINE		INPUT	       INIT    		MONITOR			*/
 /* M72 */
-GAME( 1987, rtype,	    0,		rtype,		rtype,		0,		ROT0,	"Irem", "R-Type (World)", GAME_NO_COCKTAIL )
-GAME( 1987, rtypej,	 rtype,		rtype,		rtype,		0,		ROT0,	"Irem", "R-Type (Japan)", GAME_NO_COCKTAIL )
-GAME( 1987, rtypejp,	 rtype,		rtype,		rtypep,		0,		ROT0,	"Irem", "R-Type (Japan prototype)", GAME_NO_COCKTAIL )
-GAME( 1987, rtypeu,	 rtype,		rtype,		rtype,		0,		ROT0,	"Irem (Nintendo of America license)", "R-Type (US)", GAME_NO_COCKTAIL )
-GAME( 1987, rtypeb,	 rtype,		rtype,		rtype,		0,		ROT0,	"bootleg", "R-Type (World bootleg)", GAME_NO_COCKTAIL )
-//
-GAME( 1987, bchopper,	    0,		m72,		bchopper,	bchopper,	ROT0,	"Irem", "Battle Chopper", GAME_NO_COCKTAIL )
-GAME( 1987, mrheli,	 bchopper,	m72,		bchopper,	mrheli,		ROT0,	"Irem", "Mr. HELI no Dai-Bouken", GAME_NO_COCKTAIL )
-//
-GAME( 1988, nspirit,	    0,		m72,		nspirit,	nspirit,	ROT0,	"Irem", "Ninja Spirit", GAME_NO_COCKTAIL )
-GAME( 1988, nspiritj,	 nspirit,	m72_8751,	nspirit,	m72_8751,	ROT0,	"Irem", "Saigo no Nindou (Japan)", GAME_NO_COCKTAIL ) /* some corruption on warning screen (layer enable?) */
-//
-GAME( 1988, imgfight,	    0,		m72,		imgfight,	imgfight,	ROT270,	"Irem", "Image Fight (World, revision A)", 0 )
-GAME( 1988, imgfightj,	 imgfight,	m72_8751,	imgfight,	m72_8751,	ROT270,	"Irem", "Image Fight (Japan)", 0 )
-//
-GAME( 1989, loht,	    0,		m72,		loht,		loht,		ROT0,	"Irem",	"Legend of Hero Tonma", GAME_NO_COCKTAIL )
-GAME( 1989, lohtj,	 loht,		m72_8751,	loht,		m72_8751,	ROT0,	"Irem",	"Legend of Hero Tonma (Japan)", GAME_NO_COCKTAIL )
-GAME( 1989, lohtb2,	 loht,		m72_8751,	loht,		m72_8751,	ROT0,	"bootleg", "Legend of Hero Tonma (bootleg, set 2)", GAME_NO_COCKTAIL )
-//
-GAME( 1989, xmultiplm72, xmultipl,	xmultiplm72,	xmultipl,	xmultiplm72,	ROT0,	"Irem",	"X Multiply (Japan, M72)", GAME_NO_COCKTAIL )
-//
-GAME( 1989, dbreedm72,	 dbreed,	dbreedm72,	dbreed,		dbreedm72,	ROT0,	"Irem",	"Dragon Breed (M72 PCB version)", GAME_NO_COCKTAIL )
-//
-GAME( 1990, dkgensanm72, hharry,	dkgenm72,	hharry,		dkgenm72,	ROT0,	"Irem",	"Daiku no Gensan (Japan, M72)", GAME_NO_COCKTAIL )
-//
-GAME( 1990, airduelm72,	 airduel,	m72,		airduel,	airduelm72,	ROT270,	"Irem",	"Air Duel (Japan, M72)", 0 )
-//
-GAME( 1991, gallop,	 cosmccop,	m72,		gallop,		gallop,		ROT0,	"Irem",	"Gallop - Armed police Unit (Japan)", GAME_NO_COCKTAIL )
+GAME( 1987, rtype,	    0,		rtype,		rtype,		0,	      ROT0, "Irem", "R-Type (World)", GAME_NO_COCKTAIL )
+GAME( 1987, rtypej,	 rtype,		rtype,		rtype,		0,	      ROT0, "Irem", "R-Type (Japan)", GAME_NO_COCKTAIL )
+GAME( 1987, rtypejp,	 rtype,		rtype,		rtypep,		0,	      ROT0, "Irem", "R-Type (Japan prototype)", GAME_NO_COCKTAIL )
+GAME( 1987, rtypeu,	 rtype,		rtype,		rtype,		0,	      ROT0, "Irem (Nintendo of America license)", "R-Type (US)", GAME_NO_COCKTAIL )
+GAME( 1987, rtypeb,	 rtype,		rtype,		rtype,		0,	      ROT0, "bootleg", "R-Type (World bootleg)", GAME_NO_COCKTAIL )
+GAME( 1987, bchopper,	    0,		m72,		bchopper,	bchopper,     ROT0, "Irem", "Battle Chopper", GAME_NO_COCKTAIL )
+GAME( 1987, mrheli,	 bchopper,	m72,		bchopper,	mrheli,	      ROT0, "Irem", "Mr. HELI no Dai-Bouken", GAME_NO_COCKTAIL )
+GAME( 1988, nspirit,	    0,		m72,		nspirit,	nspirit,      ROT0, "Irem", "Ninja Spirit", GAME_NO_COCKTAIL )
+GAME( 1988, nspiritj,	 nspirit,	m72_8751,	nspirit,	m72_8751,     ROT0, "Irem", "Saigo no Nindou (Japan)", GAME_NO_COCKTAIL ) /* some corruption on warning screen (layer enable?) */
+GAME( 1988, imgfight,	    0,		m72,		imgfight,	imgfight,     ROT270, "Irem", "Image Fight (World, revision A)", 0 )
+GAME( 1988, imgfightj,	 imgfight,	m72_8751,	imgfight,	m72_8751,     ROT270, "Irem", "Image Fight (Japan)", 0 )
+GAME( 1989, loht,	    0,		m72,		loht,		loht,	      ROT0, "Irem", "Legend of Hero Tonma", GAME_NO_COCKTAIL )
+GAME( 1989, lohtj,	 loht,		m72_8751,	loht,		m72_8751,     ROT0, "Irem", "Legend of Hero Tonma (Japan)", GAME_NO_COCKTAIL )
+GAME( 1989, lohtb2,	 loht,		m72_8751,	loht,		m72_8751,     ROT0, "bootleg", "Legend of Hero Tonma (bootleg, set 2)", GAME_NO_COCKTAIL )
+GAME( 1989, xmultiplm72, xmultipl,	xmultiplm72,	xmultipl,	xmultiplm72,  ROT0, "Irem", "X Multiply (Japan, M72)", GAME_NO_COCKTAIL )
+GAME( 1989, dbreedm72,	 dbreed,	dbreedm72,	dbreed,		dbreedm72,    ROT0, "Irem", "Dragon Breed (M72 PCB version)", GAME_NO_COCKTAIL )
+GAME( 1990, dkgensanm72, hharry,	dkgenm72,	hharry,		dkgenm72,     ROT0, "Irem", "Daiku no Gensan (Japan, M72)", GAME_NO_COCKTAIL )
+GAME( 1990, airduelm72,	 airduel,	m72,		airduel,	airduelm72,   ROT270, "Irem", "Air Duel (Japan, M72)", 0 )
+GAME( 1991, gallop,	 cosmccop,	m72,		gallop,		gallop,	      ROT0, "Irem", "Gallop - Armed police Unit (Japan)", GAME_NO_COCKTAIL )
 
 /* M81 */
-GAME( 1989, xmultipl,	    0,		xmultipl,	xmultipl,	0,		ROT0,	"Irem",	"X Multiply (World, M81)", GAME_NO_COCKTAIL )
-GAME( 1989, dbreed,	    0,		dbreed,		dbreed,		0,		ROT0,	"Irem",	"Dragon Breed (M81 PCB version)", GAME_NO_COCKTAIL )
-GAME( 1990, hharry,	    0,		hharry,		hharry,		0,		ROT0,	"Irem",	"Hammerin' Harry (World)", GAME_NO_COCKTAIL )
+GAME( 1989, xmultipl,	    0,		xmultipl,	xmultipl,	0,	      ROT0, "Irem", "X Multiply (World, M81)", GAME_NO_COCKTAIL )
+GAME( 1989, dbreed,	    0,		dbreed,		dbreed,		0,	      ROT0, "Irem", "Dragon Breed (M81 PCB version)", GAME_NO_COCKTAIL )
+GAME( 1990, hharry,	    0,		hharry,		hharry,		0,	      ROT0, "Irem", "Hammerin' Harry (World)", GAME_NO_COCKTAIL )
 
 /* M82 */
-GAME( 1990, majtitle,	    0,		majtitle,	rtype2,		0,		ROT0,	"Irem",	"Major Title (World)", GAME_NO_COCKTAIL )
-GAME( 1990, majtitlej,	 majtitle,	majtitle,	rtype2,		0,		ROT0,	"Irem",	"Major Title (Japan)", GAME_NO_COCKTAIL )
-GAME( 1990, airduel,	    0,		airduelm82,	airduel,	0,		ROT270,	"Irem",	"Air Duel (World, M82-A-A + M82-B-A)", 0 ) // Major Title conversion
+GAME( 1990, majtitle,	    0,		majtitle,	rtype2,		0,	      ROT0, "Irem", "Major Title (World)", GAME_NO_COCKTAIL )
+GAME( 1990, majtitlej,	 majtitle,	majtitle,	rtype2,		0,	      ROT0, "Irem", "Major Title (Japan)", GAME_NO_COCKTAIL )
+GAME( 1990, airduel,	    0,		airduelm82,	airduel,	0,	      ROT270, "Irem", "Air Duel (World, M82-A-A + M82-B-A)", 0 ) // Major Title conversion
 
 /* M84 */
-GAME( 1990, hharryu,	 hharry,	hharryu,	hharry,		0,		ROT0,	"Irem America",	"Hammerin' Harry (US)", GAME_NO_COCKTAIL )
-GAME( 1990, dkgensan,	 hharry,	hharryu,	hharry,		0,		ROT0,	"Irem",	"Daiku no Gensan (Japan, M82)", GAME_NO_COCKTAIL )
-//
-GAME( 1989, rtype2,	    0,		rtype2,		rtype2,		0,		ROT0,	"Irem",	"R-Type II", GAME_NO_COCKTAIL )
-GAME( 1989, rtype2j,	 rtype2,	rtype2,		rtype2,		0,		ROT0,	"Irem",	"R-Type II (Japan)", GAME_NO_COCKTAIL )
-GAME( 1989, rtype2jc,	 rtype2,	rtype2,		rtype2,		0,		ROT0,	"Irem",	"R-Type II (Japan, revision C)", GAME_NO_COCKTAIL )
-//
-GAME( 1991, cosmccop,	    0,		cosmccop,	gallop,		0,		ROT0,	"Irem",	"Cosmic Cop (World)", GAME_NO_COCKTAIL )
-//
-GAME( 1991, ltswords,	    0,		kengo,		kengo,		0,		ROT0,	"Irem",	"Lightning Swords", GAME_NO_COCKTAIL )
-GAME( 1991, kengo,	 ltswords,	kengo,		kengo,		0,		ROT0,	"Irem",	"Ken-Go (set 1)", GAME_NO_COCKTAIL )
-GAME( 1991, kengoa,	 ltswords,	kengo,		kengo,		0,		ROT0,	"Irem",	"Ken-Go (set 2)", GAME_NO_COCKTAIL )	// has 'for use in Japan' message, above set doesn't
+GAME( 1990, hharryu,	 hharry,	hharryu,	hharry,		0,	      ROT0, "Irem America", "Hammerin' Harry (US)", GAME_NO_COCKTAIL )
+GAME( 1990, dkgensan,	 hharry,	hharryu,	hharry,		0,	      ROT0, "Irem", "Daiku no Gensan (Japan, M82)", GAME_NO_COCKTAIL )
+GAME( 1989, rtype2,	    0,		rtype2,		rtype2,		0,	      ROT0, "Irem", "R-Type II", GAME_NO_COCKTAIL )
+GAME( 1989, rtype2j,	 rtype2,	rtype2,		rtype2,		0,	      ROT0, "Irem", "R-Type II (Japan)", GAME_NO_COCKTAIL )
+GAME( 1989, rtype2jc,	 rtype2,	rtype2,		rtype2,		0,	      ROT0, "Irem", "R-Type II (Japan, revision C)", GAME_NO_COCKTAIL )
+GAME( 1991, cosmccop,	    0,		cosmccop,	gallop,		0,	      ROT0, "Irem", "Cosmic Cop (World)", GAME_NO_COCKTAIL )
+GAME( 1991, ltswords,	    0,		kengo,		kengo,		0,	      ROT0, "Irem", "Lightning Swords", GAME_NO_COCKTAIL )
+GAME( 1991, kengo,	 ltswords,	kengo,		kengo,		0,	      ROT0, "Irem", "Ken-Go (set 1)", GAME_NO_COCKTAIL )
+GAME( 1991, kengoa,	 ltswords,	kengo,		kengo,		0,	      ROT0, "Irem", "Ken-Go (set 2)", GAME_NO_COCKTAIL )	// has 'for use in Japan' message, above set doesn't
 
 /* M85 */
-GAME( 1990, poundfor,	    0,		poundfor,	poundfor,	0,		ROT270, "Irem", "Pound for Pound (World)", GAME_NO_COCKTAIL )
-GAME( 1990, poundforj,	 poundfor,	poundfor,	poundfor,	0,		ROT270, "Irem", "Pound for Pound (Japan)", GAME_NO_COCKTAIL )
-GAME( 1990, poundforu,	 poundfor,	poundfor,	poundfor,	0,		ROT270, "Irem America", "Pound for Pound (US)", GAME_NO_COCKTAIL )
+// Poundfor is a trackball game，that is not included in FBA02.97.38 romsets
+GAME( 1990, poundfor,	    0,		poundfor,	poundfor,	0,	      ROT270, "Irem", "Pound for Pound (World)", GAME_NO_COCKTAIL )
+GAME( 1990, poundforj,	 poundfor,	poundfor,	poundfor,	0,	      ROT270, "Irem", "Pound for Pound (Japan)", GAME_NO_COCKTAIL )
+GAME( 1990, poundforu,	 poundfor,	poundfor,	poundfor,	0,	      ROT270, "Irem America", "Pound for Pound (US)", GAME_NO_COCKTAIL )
 
 /* bootlegs, unique hw */
-GAME( 1989, lohtb,	 loht,		m72,		loht,		lohtb,		ROT0,	"bootleg", "Legend of Hero Tonma (bootleg, set 1)", GAME_NO_COCKTAIL )
+GAME( 1989, lohtb,	 loht,		m72,		loht,		lohtb,	      ROT0, "bootleg", "Legend of Hero Tonma (bootleg, set 1)", GAME_NO_COCKTAIL )

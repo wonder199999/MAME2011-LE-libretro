@@ -9,48 +9,45 @@
 
 ***************************************************************************/
 
-INLINE void m72_get_tile_info(running_machine *machine,tile_data *tileinfo,int tile_index,const UINT16 *vram,int gfxnum)
+INLINE void m72_get_tile_info(running_machine *machine, tile_data *tileinfo, int tile_index, const UINT16 *vram, int gfxnum)
 {
-	int code,attr,color,pri;
+	tile_index <<= 1;
 
-	tile_index *= 2;
+	INT32 code = vram[tile_index] & 0xff;
+	INT32 attr = vram[tile_index] >> 8;
+	INT32 color = vram[tile_index + 1] & 0xff;
+	INT32 pri = 0;
 
-	code  = vram[tile_index] & 0xff;
-	attr  = vram[tile_index] >> 8;
-	color = vram[tile_index+1] & 0xff;
+	if (color & 0x80)
+		pri = 2;
+	else if (color & 0x40)
+		pri = 1;
 
-	if (color & 0x80) pri = 2;
-	else if (color & 0x40) pri = 1;
-	else pri = 0;
-/* color & 0x10 is used in bchopper and hharry, more priority? */
-
-	SET_TILE_INFO(
-			gfxnum,
+	/* color & 0x10 is used in bchopper and hharry, more priority? */
+	SET_TILE_INFO(	gfxnum,
 			code + ((attr & 0x3f) << 8),
 			color & 0x0f,
 			TILE_FLIPYX((attr & 0xc0) >> 6));
 	tileinfo->group = pri;
 }
 
-INLINE void rtype2_get_tile_info(running_machine *machine,tile_data *tileinfo,int tile_index,const UINT16 *vram,int gfxnum)
+INLINE void rtype2_get_tile_info(running_machine *machine, tile_data *tileinfo, int tile_index, const UINT16 *vram, int gfxnum)
 {
-	int code,attr,color,pri;
+	tile_index <<= 1;
 
-	tile_index *= 2;
+	INT32 code = vram[tile_index];
+	INT32 attr = vram[tile_index + 1] >> 8;
+	INT32 color = vram[tile_index + 1] & 0xff;
+	INT32 pri = 0;
 
-	code  = vram[tile_index];
-	color = vram[tile_index+1] & 0xff;
-	attr  = vram[tile_index+1] >> 8;
+	if (attr & 0x01)
+		pri = 2;
+	else if (color & 0x80)
+		pri = 1;
 
-	if (attr & 0x01) pri = 2;
-	else if (color & 0x80) pri = 1;
-	else pri = 0;
-
-/* (vram[tile_index+2] & 0x10) is used by majtitle on the green, but it's not clear for what */
-/* (vram[tile_index+3] & 0xfe) are used as well */
-
-	SET_TILE_INFO(
-			gfxnum,
+	/* (vram[tile_index+2] & 0x10) is used by majtitle on the green, but it's not clear for what */
+	/* (vram[tile_index+3] & 0xfe) are used as well */
+	SET_TILE_INFO(	gfxnum,
 			code,
 			color & 0x0f,
 			TILE_FLIPYX((color & 0x60) >> 5));
@@ -92,7 +89,7 @@ static TILE_GET_INFO( rtype2_get_fg_tile_info )
 static TILEMAP_MAPPER( majtitle_scan_rows )
 {
 	/* logical (col,row) -> memory offset */
-	return row * 256 + col;
+	return ((row << 8) + col);
 }
 
 
@@ -188,9 +185,6 @@ VIDEO_START( majtitle )
 {
 	m72_state *state = machine->driver_data<m72_state>();
 
-	// The tilemap can be 256x64, but seems to be used at 128x64 (scroll wraparound).
-	// The layout ramains 256x64, the right half is just not displayed.
-	//  bg_tilemap = tilemap_create(machine, rtype2_get_bg_tile_info,tilemap_scan_rows,8,8,256,64);
 	state->bg_tilemap = tilemap_create(machine, rtype2_get_bg_tile_info, majtitle_scan_rows, 8, 8, 128, 64);
 	state->fg_tilemap = tilemap_create(machine, rtype2_get_fg_tile_info, tilemap_scan_rows, 8, 8, 64, 64);
 
@@ -253,20 +247,20 @@ VIDEO_START( hharry )
 READ16_HANDLER( m72_palette1_r )
 {
 	/* A9 isn't connected, so 0x200-0x3ff mirrors 0x000-0x1ff etc. */
-	offset &= ~0x100;
+	offset &= ~0x0100;
 
-	return space->machine->generic.paletteram.u16[offset] | 0xffe0;	/* only D0-D4 are connected */
+	return space->machine->generic.paletteram.u16[offset] | 0xffe0;		/* only D0-D4 are connected */
 }
 
 READ16_HANDLER( m72_palette2_r )
 {
 	/* A9 isn't connected, so 0x200-0x3ff mirrors 0x000-0x1ff etc. */
-	offset &= ~0x100;
+	offset &= ~0x0100;
 
 	return space->machine->generic.paletteram2.u16[offset] | 0xffe0;	/* only D0-D4 are connected */
 }
 
-INLINE void changecolor(running_machine *machine,int color,int r,int g,int b)
+INLINE void changecolor(running_machine *machine, int color, int r, int g, int b)
 {
 	palette_set_color_rgb(machine, color, pal5bit(r), pal5bit(g), pal5bit(b));
 }
@@ -274,12 +268,11 @@ INLINE void changecolor(running_machine *machine,int color,int r,int g,int b)
 WRITE16_HANDLER( m72_palette1_w )
 {
 	/* A9 isn't connected, so 0x200-0x3ff mirrors 0x000-0x1ff etc. */
-	offset &= ~0x100;
+	offset &= ~0x0100;
 	COMBINE_DATA(&space->machine->generic.paletteram.u16[offset]);
-	offset &= 0x0ff;
+	offset &= 0xff;
 
-	changecolor(space->machine,
-			offset,
+	changecolor(space->machine, offset,
 			space->machine->generic.paletteram.u16[offset + 0x000],
 			space->machine->generic.paletteram.u16[offset + 0x200],
 			space->machine->generic.paletteram.u16[offset + 0x400]
@@ -289,12 +282,11 @@ WRITE16_HANDLER( m72_palette1_w )
 WRITE16_HANDLER( m72_palette2_w )
 {
 	/* A9 isn't connected, so 0x200-0x3ff mirrors 0x000-0x1ff etc. */
-	offset &= ~0x100;
+	offset &= ~0x0100;
 	COMBINE_DATA(&space->machine->generic.paletteram2.u16[offset]);
-	offset &= 0x0ff;
+	offset &= 0xff;
 
-	changecolor(space->machine,
-			offset + 256,
+	changecolor(space->machine, offset + 256,
 			space->machine->generic.paletteram2.u16[offset + 0x000],
 			space->machine->generic.paletteram2.u16[offset + 0x200],
 			space->machine->generic.paletteram2.u16[offset + 0x400]
@@ -356,7 +348,6 @@ WRITE16_HANDLER( m72_dmaon_w )
 	}
 }
 
-
 WRITE16_HANDLER( m72_port02_w )
 {
 	if (ACCESSING_BITS_0_7)
@@ -403,7 +394,6 @@ WRITE16_HANDLER( rtype2_port02_w )
 	}
 }
 
-
 /* the following is mostly a kludge. This register seems to be used for something else */
 WRITE16_HANDLER( majtitle_gfx_ctrl_w )
 {
@@ -421,16 +411,15 @@ WRITE16_HANDLER( majtitle_gfx_ctrl_w )
 
 ***************************************************************************/
 
-static void m72_draw_sprites(running_machine *machine, bitmap_t *bitmap,const rectangle *cliprect)
+static void m72_draw_sprites(running_machine *machine, bitmap_t *bitmap, const rectangle *cliprect)
 {
 	m72_state *state = machine->driver_data<m72_state>();
-	int offs;
 
-	offs = 0;
-	while (offs < machine->generic.spriteram_size / 2)
+	INT32 code, color, sx, sy, flipx, flipy, c, w, h, x, y;
+	const UINT32 size = machine->generic.spriteram_size / 2;
+
+	for (UINT32 offs = 0; offs < size; offs += w << 2)
 	{
-		int code,color,sx,sy,flipx,flipy,w,h,x,y;
-
 		code = state->spriteram[offs + 1];
 		color = state->spriteram[offs + 2] & 0x0f;
 		sx = -256 + (state->spriteram[offs + 3] & 0x3ff);
@@ -454,74 +443,73 @@ static void m72_draw_sprites(running_machine *machine, bitmap_t *bitmap,const re
 		{
 			for (y = 0; y < h; y++)
 			{
-				int c = code;
+				c = code;
 
 				if (flipx)
-					c += 8*(w-1-x);
+					c += 8 * (w - 1 - x);
 				else
-					c += 8*x;
+					c += 8 * x;
 				if (flipy)
-					c += h-1-y;
+					c += h - 1 -y;
 				else
 					c += y;
 
 				drawgfx_transpen(bitmap, cliprect, machine->gfx[0],
-						c,
-						color,
-						flipx, flipy,
-						sx + 16 * x, sy + 16 * y, 0);
+						 c, color, flipx, flipy,
+						 sx + (x << 4), sy + (y << 4), 0
+						);
 			}
 		}
-
-		offs += w * 4;
 	}
 }
 
-static void majtitle_draw_sprites(running_machine *machine, bitmap_t *bitmap,const rectangle *cliprect)
+static void majtitle_draw_sprites(running_machine *machine, bitmap_t *bitmap, const rectangle *cliprect)
 {
 	UINT16 *spriteram16_2 = machine->generic.spriteram2.u16;
-	int offs;
 
-	for (offs = 0;offs < machine->generic.spriteram_size;offs += 4)
+	INT32 code, color, sx, sy, flipx, flipy, c, w, h, x, y;
+
+	for (UINT32 offs = 0; offs < machine->generic.spriteram_size; offs += 4)
 	{
-		int code,color,sx,sy,flipx,flipy,w,h,x,y;
+		code = spriteram16_2[offs + 1];
+		color = spriteram16_2[offs + 2] & 0x0f;
+		sx = -256 + (spriteram16_2[offs + 3] & 0x03ff);
+		sy = 384 - (spriteram16_2[offs + 0] & 0x01ff);
+		flipx = spriteram16_2[offs + 2] & 0x0800;
+		flipy = spriteram16_2[offs + 2] & 0x0400;
 
-
-		code = spriteram16_2[offs+1];
-		color = spriteram16_2[offs+2] & 0x0f;
-		sx = -256+(spriteram16_2[offs+3] & 0x3ff);
-		sy = 384-(spriteram16_2[offs+0] & 0x1ff);
-		flipx = spriteram16_2[offs+2] & 0x0800;
-		flipy = spriteram16_2[offs+2] & 0x0400;
-
-		w = 1;	// << ((spriteram16_2[offs+2] & 0xc000) >> 14);
-		h = 1 << ((spriteram16_2[offs+2] & 0x3000) >> 12);
+		w = 1;
+		h = 1 << ((spriteram16_2[offs + 2] & 0x3000) >> 12);
 		sy -= 16 * h;
 
 		if (flip_screen_get(machine))
 		{
-			sx = 512 - 16*w - sx;
-			sy = 256 - 16*h - sy;
+			sx = 512 - 16 * w - sx;
+			sy = 256 - 16 * h - sy;
 			flipx = !flipx;
 			flipy = !flipy;
 		}
 
-		for (x = 0;x < w;x++)
+		for (x = 0; x < w; x++)
 		{
-			for (y = 0;y < h;y++)
+			for (y = 0; y < h; y++)
 			{
-				int c = code;
+				c = code;
 
-				if (flipx) c += 8*(w-1-x);
-				else c += 8*x;
-				if (flipy) c += h-1-y;
-				else c += y;
+				if (flipx)
+					c += 8 * (w - 1 - x);
+				else
+					c += 8 * x;
+				if (flipy)
+					c += h - 1 - y;
+				else
+					c += y;
 
-				drawgfx_transpen(bitmap,cliprect,machine->gfx[2],
-						c,
-						color,
-						flipx,flipy,
-						sx + 16*x,sy + 16*y,0);
+				drawgfx_transpen(bitmap, cliprect, machine->gfx[2],
+						 c, color,
+						 flipx, flipy,
+						 sx + (x << 4), sy + (y << 4), 0
+						);
 			}
 		}
 	}
@@ -539,13 +527,14 @@ VIDEO_UPDATE( m72 )
 
 	tilemap_set_scrollx(state->fg_tilemap, 0, state->scrollx1);
 	tilemap_set_scrolly(state->fg_tilemap, 0, state->scrolly1);
-
 	tilemap_set_scrollx(state->bg_tilemap, 0, state->scrollx2);
 	tilemap_set_scrolly(state->bg_tilemap, 0, state->scrolly2);
 
 	tilemap_draw(bitmap, cliprect, state->bg_tilemap, TILEMAP_DRAW_LAYER1, 0);
 	tilemap_draw(bitmap, cliprect, state->fg_tilemap, TILEMAP_DRAW_LAYER1, 0);
+
 	m72_draw_sprites(screen->machine, bitmap, cliprect);
+
 	tilemap_draw(bitmap, cliprect, state->bg_tilemap, TILEMAP_DRAW_LAYER0, 0);
 	tilemap_draw(bitmap, cliprect, state->fg_tilemap, TILEMAP_DRAW_LAYER0, 0);
 
@@ -555,7 +544,6 @@ VIDEO_UPDATE( m72 )
 VIDEO_UPDATE( majtitle )
 {
 	m72_state *state = screen->machine->driver_data<m72_state>();
-	int i;
 
 	if (state->video_off)
 	{
@@ -565,13 +553,11 @@ VIDEO_UPDATE( majtitle )
 
 	tilemap_set_scrollx(state->fg_tilemap, 0, state->scrollx1);
 	tilemap_set_scrolly(state->fg_tilemap, 0, state->scrolly1);
-
 	if (state->majtitle_rowscroll)
 	{
 		tilemap_set_scroll_rows(state->bg_tilemap, 512);
-		for (i = 0; i < 512; i++)
-			tilemap_set_scrollx(state->bg_tilemap, (i + state->scrolly2) & 0x01ff,
-				256 + state->majtitle_rowscrollram[i]);
+		for (int i = 0; i < 512; i++)
+			tilemap_set_scrollx(state->bg_tilemap, (i + state->scrolly2) & 0x01ff, 256 + state->majtitle_rowscrollram[i]);
 	}
 	else
 	{
@@ -582,8 +568,10 @@ VIDEO_UPDATE( majtitle )
 
 	tilemap_draw(bitmap, cliprect, state->bg_tilemap, TILEMAP_DRAW_LAYER1, 0);
 	tilemap_draw(bitmap, cliprect, state->fg_tilemap, TILEMAP_DRAW_LAYER1, 0);
+
 	majtitle_draw_sprites(screen->machine, bitmap, cliprect);
 	m72_draw_sprites(screen->machine, bitmap, cliprect);
+
 	tilemap_draw(bitmap, cliprect, state->bg_tilemap, TILEMAP_DRAW_LAYER0, 0);
 	tilemap_draw(bitmap, cliprect, state->fg_tilemap, TILEMAP_DRAW_LAYER0, 0);
 
