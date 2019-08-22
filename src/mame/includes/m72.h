@@ -4,6 +4,19 @@
 
 *************************************************************************/
 
+struct _sample_data
+{
+	const INT32 bchopper[6];
+	const INT32 nspirit[9];
+	const INT32 loht[7];
+	const INT32 xmultiplm72[3];
+	const INT32 imgfight[7];
+	const INT32 dbreedm72[9];
+	const INT32 airduelm72[16];
+	const INT32 dkgenm72[28];
+	const INT32 gallop[31];
+};
+
 class m72_state : public driver_data_t
 {
 public:
@@ -16,21 +29,28 @@ public:
 
 	/* devices */
 	running_device	*maincpu;
+	running_device	*sndcpu;
+	running_device	*mcu;
+	running_device	*dac;
+	running_device	*m72audio;
 
 	/* memory pointers */
-	UINT16		*protection_ram;
-	const UINT8	*protection_code;
-	const UINT8	*protection_crc;
 	UINT16		*spriteram;
+	UINT16		*spriteram2;
+	UINT16		*buffered_spriteram;
 	UINT16		*videoram1;
 	UINT16		*videoram2;
 	UINT16		*majtitle_rowscrollram;
 	UINT8		*soundram;
+	UINT16		*protection_ram;
+	const UINT8	*protection_code;
+	const UINT8	*protection_crc;
 	tilemap_t	*fg_tilemap;
 	tilemap_t	*bg_tilemap;
 
 	/* video-related */
 	emu_timer	*scanline_timer;
+	size_t		spriteram_size;
 	UINT32		raster_irq_position;
 	INT32		scrollx1;
 	INT32		scrollx2;
@@ -40,14 +60,14 @@ public:
 	INT32		majtitle_rowscroll;
 
 	/* misc */
+	INT32		prev[4];
+	INT32		diff[4];
+	UINT32		sample_addr;
 	UINT8		mcu_snd_cmd_latch;
 	UINT8		mcu_sample_latch;
 	UINT8		mcu_sample_addr;
 	UINT8		irqvector;
 	UINT8		irq_base;
-	UINT32		sample_addr;
-	INT32		prev[4];
-	INT32		diff[4];
 };
 
 

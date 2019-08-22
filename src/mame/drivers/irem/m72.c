@@ -109,6 +109,11 @@ static MACHINE_START( m72 )
 {
 	m72_state *state = machine->driver_data<m72_state>();
 
+	state->maincpu = machine->device("maincpu");
+	state->sndcpu = machine->device("soundcpu");
+	state->dac = machine->device("dac");
+	state->mcu = machine->device("mcu");
+
 	state->scanline_timer = timer_alloc(machine, m72_scanline_interrupt, NULL);
 
 	state_save_register_global(machine, state->mcu_sample_addr);
@@ -154,22 +159,23 @@ static TIMER_CALLBACK( m72_scanline_interrupt )
 
 	int scanline = param;
 
-	/* raster interrupt - visible area only? */
-	if (scanline < 256 && scanline == state->raster_irq_position - 128)
-	{
-		machine->primary_screen->update_partial(scanline);
-		cputag_set_input_line_and_vector(machine, "maincpu", 0, HOLD_LINE, state->irq_base + 2);
-	}
 	/* VBLANK interrupt */
-	else if (scanline == 256)
+	if (scanline == 256)
 	{
 		machine->primary_screen->update_partial(scanline);
-		cputag_set_input_line_and_vector(machine, "maincpu", 0, HOLD_LINE, state->irq_base + 0);
+		cpu_set_input_line_and_vector(state->maincpu, 0, HOLD_LINE, state->irq_base + 0);
+	}
+	/* raster interrupt - visible area only? */
+	else if (scanline < 256 && scanline == state->raster_irq_position - 128)
+	{
+		machine->primary_screen->update_partial(scanline);
+		cpu_set_input_line_and_vector(state->maincpu, 0, HOLD_LINE, state->irq_base + 2);
 	}
 
 	/* adjust for next scanline */
 	if (++scanline >= machine->primary_screen->height())
 		scanline = 0;
+
 	timer_adjust_oneshot(state->scanline_timer, machine->primary_screen->time_until_pos(scanline), scanline);
 }
 
@@ -205,7 +211,7 @@ static WRITE16_HANDLER( m72_main_mcu_sound_w )
 		m72_state *state = space->machine->driver_data<m72_state>();
 
 		state->mcu_snd_cmd_latch = data;
-		cputag_set_input_line(space->machine, "mcu", 1, ASSERT_LINE);
+		cpu_set_input_line(state->mcu, 1, ASSERT_LINE);
 	}
 }
 
@@ -222,7 +228,7 @@ static WRITE16_HANDLER( m72_main_mcu_w )
 	if (ACCESSING_BITS_8_15 && offset == 0x0fff / 2)
 	{
 		state->protection_ram[offset] = val;
-		cputag_set_input_line(space->machine, "mcu", 0, ASSERT_LINE);
+		cpu_set_input_line(state->mcu, 0, ASSERT_LINE);
 	}
 	else
 		timer_call_after_resynch(space->machine, state->protection_ram, ((offset << 16) | val), delayed_ram16_w);
@@ -243,20 +249,12 @@ static READ8_HANDLER( m72_mcu_data_r )
 	m72_state *state = space->machine->driver_data<m72_state>();
 
 	if (offset == 0x0fff || offset == 0x0ffe)
-		cputag_set_input_line(space->machine, "mcu", 0, CLEAR_LINE);
+		cpu_set_input_line(state->mcu, 0, CLEAR_LINE);
 
 	UINT8 ret = (offset & 0x01) ? ((state->protection_ram[offset / 2] & 0xff00) >> 8) :
 		((state->protection_ram[offset / 2] & 0x00ff));
 
 	return ret;
-}
-
-static INTERRUPT_GEN( m72_mcu_int )
-{
-	m72_state *state = device->machine->driver_data<m72_state>();
-
-	state->mcu_snd_cmd_latch = 0x11;
-	cpu_set_input_line(device, 1, ASSERT_LINE);
 }
 
 static READ8_HANDLER( m72_mcu_sample_r )
@@ -271,7 +269,7 @@ static WRITE8_HANDLER( m72_mcu_ack_w )
 {
 	m72_state *state = space->machine->driver_data<m72_state>();
 
-	cputag_set_input_line(space->machine, "mcu", 1, CLEAR_LINE);
+	cpu_set_input_line(state->mcu, 1, CLEAR_LINE);
 	state->mcu_snd_cmd_latch = 0;
 }
 
@@ -293,7 +291,7 @@ static WRITE8_HANDLER( m72_mcu_port_w )
 	if (offset == 1)
 	{
 		state->mcu_sample_latch = data;
-		cputag_set_input_line(space->machine, "soundcpu", INPUT_LINE_NMI, PULSE_LINE);
+		cpu_set_input_line(state->sndcpu, INPUT_LINE_NMI, PULSE_LINE);
 	}
 }
 
@@ -322,28 +320,6 @@ static READ8_HANDLER( m72_snd_cpu_sample_r )
 	return state->mcu_sample_latch;
 }
 
-INLINE DRIVER_INIT( m72_8751 )
-{
-	m72_state *state = machine->driver_data<m72_state>();
-
-	address_space *program = cputag_get_address_space(machine, "maincpu", ADDRESS_SPACE_PROGRAM);
-	address_space *io = cputag_get_address_space(machine, "maincpu", ADDRESS_SPACE_IO);
-	address_space *sndio = cputag_get_address_space(machine, "soundcpu", ADDRESS_SPACE_IO);
-	running_device *dac = machine->device("dac");
-
-	state->protection_ram = auto_alloc_array(machine, UINT16, 0x10000 / 2);
-	memory_install_read_bank(program, 0x0b0000, 0x0bffff, 0, 0, "bank1");
-	memory_install_write16_handler(program, 0x0b0000, 0x0b0fff, 0, 0, m72_main_mcu_w);
-	memory_set_bankptr(machine, "bank1", state->protection_ram);
-
-	//memory_install_write16_handler(io, 0xc0, 0xc1, 0, 0, loht_sample_trigger_w);
-	memory_install_write16_handler(io, 0xc0, 0xc1, 0, 0, m72_main_mcu_sound_w);
-
-	/* sound cpu */
-	memory_install_write8_device_handler(sndio, dac, 0x82, 0x82, 0xff, 0, m72_snd_cpu_sample_w);
-	memory_install_read8_handler(sndio, 0x84, 0x84, 0xff, 0, m72_snd_cpu_sample_r);
-}
-
 
 /***************************************************************************
 
@@ -365,29 +341,26 @@ the NMI handler in the other games.
 
 ***************************************************************************/
 
-struct _sample_data
+static INTERRUPT_GEN( m72_mcu_int )
 {
-	const UINT16 bchopper[6];
-	const UINT16 nspirit[9];
-	const UINT16 loht[7];
-	const UINT16 xmultiplm72[3];
-	const UINT32 imgfight[7];
-	const UINT32 dbreedm72[9];
-	const UINT32 airduelm72[16];
-	const UINT32 dkgenm72[28];
-	const UINT32 gallop[31];
-};
+	m72_state *state = device->machine->driver_data<m72_state>();
+
+	state->mcu_snd_cmd_latch = 0x11;
+	cpu_set_input_line(device, 1, ASSERT_LINE);
+}
 
 static INTERRUPT_GEN( fake_nmi )
 {
+	m72_state *state = device->machine->driver_data<m72_state>();
 	address_space *space = cpu_get_address_space(device, ADDRESS_SPACE_PROGRAM);
+
 	int sample = m72_sample_r(space, 0);
 
 	if (sample)
-		m72_sample_w(device->machine->device("dac"), 0, sample);
+		m72_sample_w(state->dac, 0, sample);
 }
 
-static struct _sample_data sample_data = {
+struct _sample_data sample_data = {
 	/* bchopper */
 	{ 0x0000, 0x0010, 0x2510, 0x6510, 0x8510, 0x9310 },
 	/* nspirit */
@@ -470,7 +443,6 @@ static WRITE16_HANDLER( gallop_sample_trigger_w )
 }
 
 
-
 /***************************************************************************
 
 Protection simulation
@@ -525,16 +497,16 @@ static const UINT8 bchopper_code[CODE_LEN] = {
 	// "This game can only be played in Japan..." message in the video text buffer
 	// the message is nowhere to be found in the ROMs, so has to be displayed by the mcu
 	0xc6,0x06,0x70,0x16,0x77,	// mov [1670h], byte 077h
-	0xea,0x68,0x01,0x40,0x00	// jmp  0040:$0168
+	0xea,0x68,0x01,0x40,0x00,	// jmp  0040:$0168
 };
 static const UINT8 bchopper_crc[CRC_LEN] = {
 	0x1a, 0x12, 0x5c, 0x08, 0x84, 0xb6, 0x73,
-	0xd1, 0x54, 0x91, 0x94, 0xeb, 0x00, 0x00
+	0xd1, 0x54, 0x91, 0x94, 0xeb, 0x00, 0x00,
 };
 
 static const UINT8 mrheli_crc[CRC_LEN] = {
 	0x24, 0x21, 0x1f, 0x14, 0xf9, 0x28, 0xfb,
-	0x47, 0x4c, 0x77, 0x9e, 0xc2, 0x00, 0x00
+	0x47, 0x4c, 0x77, 0x9e, 0xc2, 0x00, 0x00,
 };
 
 /* Ninja Spirit */
@@ -559,7 +531,7 @@ static const UINT8 nspirit_code[CODE_LEN] = {
 	// the message is nowhere to be found in the ROMs, so has to be displayed by the mcu
 	0xc6,0x06,0x70,0x16,0x57,	// mov [1670h], byte 057h
 	0xc6,0x06,0x71,0x16,0x00,	// mov [1671h], byte 000h
-	0xea,0x00,0x00,0x40,0x00	// jmp  0040:$0000
+	0xea,0x00,0x00,0x40,0x00,	// jmp  0040:$0000
 };
 
 static const UINT8 nspirit_crc[CRC_LEN] = {
@@ -597,16 +569,15 @@ static const UINT8 imgfight_code[CODE_LEN] = {
 	// "This game can only be played in Japan..." message in the video text buffer
 	// the message is nowhere to be found in the ROMs, so has to be displayed by the mcu
 	0xc6,0x06,0xb0,0x1c,0x57,	// mov [1cb0h], byte 057h
-	0xea,0x00,0x00,0x40,0x00	// jmp  0040:$0000
+	0xea,0x00,0x00,0x40,0x00,	// jmp  0040:$0000
 };
 static const UINT8 imgfight_crc[CRC_LEN] = {
 	0x7e, 0xcc, 0xec, 0x03, 0x04, 0x33, 0xb6,
-	0xc5, 0xbf, 0x37, 0x92, 0x94, 0x00, 0x00
+	0xc5, 0xbf, 0x37, 0x92, 0x94, 0x00, 0x00,
 };
 
 /* Legend of Hero Tonma */
-static const UINT8 loht_code[CODE_LEN] =
-{
+static const UINT8 loht_code[CODE_LEN] = {
 	0x68,0x00,0xa0,			// push 0a000h
 	0x1f,				// pop ds
 	0xc6,0x06,0x3c,0x38,0x47,	// mov [383ch], byte 047h
@@ -621,7 +592,7 @@ static const UINT8 loht_code[CODE_LEN] =
 	0x68,0x00,0xd0,			// push 0d000h // Japan set only
 	0x1f,				// pop ds // Japan set only
 	0xc6,0x06,0x70,0x16,0x57,	// mov [1670h], byte 057h // Japan set only - checks this (W) of WARNING
-	0xea,0x5d,0x01,0x40,0x00	// jmp  0040:$015d
+	0xea,0x5d,0x01,0x40,0x00,	// jmp  0040:$015d
 };
 
 static const UINT8 loht_crc[CRC_LEN] = {
@@ -633,22 +604,22 @@ static const UINT8 loht_crc[CRC_LEN] = {
 
 /* X Multiply */
 static const UINT8 xmultiplm72_code[CODE_LEN] = {
-	0xea, 0x30, 0x02, 0x00, 0x0e	// jmp  0e00:$0230
+	0xea, 0x30, 0x02, 0x00, 0x0e,	// jmp  0e00:$0230
 };
 
 static const UINT8 xmultiplm72_crc[CRC_LEN] = {
 	0x73, 0x82, 0x4e, 0x3f, 0xfc, 0x56, 0x59,
-	0x06, 0x05, 0x48, 0xa8, 0xf4, 0x00, 0x00
+	0x06, 0x05, 0x48, 0xa8, 0xf4, 0x00, 0x00,
 };
 
 /* Dragon Breed */
 static const UINT8 dbreedm72_code[CODE_LEN] = {
-	0xea,0x6c,0x00,0x00,0x00	// jmp  0000:$006c
+	0xea,0x6c,0x00,0x00,0x00,	// jmp  0000:$006c
 };
 
 static const UINT8 dbreedm72_crc[CRC_LEN] = {
 	0xa4, 0x96, 0x5f, 0xc0, 0xab, 0x49, 0x9f,
-	0x19, 0x84, 0xe6, 0xd6, 0xca, 0x00, 0x00
+	0x19, 0x84, 0xe6, 0xd6, 0xca, 0x00, 0x00,
 };
 
 /* Air Duel */
@@ -664,21 +635,21 @@ static const UINT8 airduelm72_code[CODE_LEN] = {
 
 static const UINT8 airduelm72_crc[CRC_LEN] = {
 	0x72, 0x9c, 0xca, 0x85, 0xc9,
-	0x12, 0xcc, 0xea, 0x00, 0x00
+	0x12, 0xcc, 0xea, 0x00, 0x00,
 };
 
 /* Daiku no Gensan */
 static const UINT8 dkgenm72_code[CODE_LEN] = {
-	0xea,0x3d,0x00,0x00,0x10	// jmp  1000:$003d
+	0xea,0x3d,0x00,0x00,0x10,	// jmp  1000:$003d
 };
 
 static const UINT8 dkgenm72_crc[CRC_LEN] = {
 	0xc8, 0xb4, 0xdc, 0xf8, 0xd3, 0xba, 0x48,
-	0xed, 0x79, 0x08, 0x1c, 0xb3, 0x00, 0x00
+	0xed, 0x79, 0x08, 0x1c, 0xb3, 0x00, 0x00,
 };
 
 
-static void copy_le( UINT16 *dest, const UINT8 *src, UINT8 bytes )
+static void copy_le(UINT16 *dest, const UINT8 *src, UINT8 bytes)
 {
 	for (int i = 0; i < bytes; i += 2)
 		dest[i / 2] = src[i + 0] | (src[i + 1] << 8);
@@ -707,7 +678,7 @@ static WRITE16_HANDLER( protection_w )
 			copy_le(&state->protection_ram[0x0fe0], state->protection_crc, CRC_LEN);
 }
 
-static void install_protection_handler( running_machine *machine, const UINT8 *code, const UINT8 *crc )
+static void install_protection_handler(running_machine *machine, const UINT8 *code, const UINT8 *crc)
 {
 	m72_state *state = machine->driver_data<m72_state>();
 
@@ -719,6 +690,27 @@ static void install_protection_handler( running_machine *machine, const UINT8 *c
 	memory_install_read16_handler(cputag_get_address_space(machine, "maincpu", ADDRESS_SPACE_PROGRAM), 0x0b0ffa, 0x0b0ffb, 0, 0, protection_r);
 	memory_install_write16_handler(cputag_get_address_space(machine, "maincpu", ADDRESS_SPACE_PROGRAM), 0x0b0000, 0x0b0fff, 0, 0, protection_w);
 	memory_set_bankptr(machine, "bank1", state->protection_ram);
+}
+
+static DRIVER_INIT( m72_8751 )
+{
+	m72_state *state = machine->driver_data<m72_state>();
+
+	address_space *program = cputag_get_address_space(machine, "maincpu", ADDRESS_SPACE_PROGRAM);
+	address_space *io = cputag_get_address_space(machine, "maincpu", ADDRESS_SPACE_IO);
+	address_space *sndio = cputag_get_address_space(machine, "soundcpu", ADDRESS_SPACE_IO);
+	running_device *dac = machine->device("dac");
+
+	state->protection_ram = auto_alloc_array(machine, UINT16, 0x10000 / 2);
+	memory_install_read_bank(program, 0x0b0000, 0x0bffff, 0, 0, "bank1");
+	memory_install_write16_handler(program, 0x0b0000, 0x0b0fff, 0, 0, m72_main_mcu_w);
+	memory_set_bankptr(machine, "bank1", state->protection_ram);
+
+	memory_install_write16_handler(io, 0xc0, 0xc1, 0, 0, m72_main_mcu_sound_w);
+
+	/* sound cpu */
+	memory_install_write8_device_handler(sndio, dac, 0x82, 0x82, 0xff, 0, m72_snd_cpu_sample_w);
+	memory_install_read8_handler(sndio, 0x84, 0x84, 0xff, 0, m72_snd_cpu_sample_r);
 }
 
 static DRIVER_INIT( bchopper )
@@ -892,11 +884,11 @@ static READ16_HANDLER( poundfor_trackball_r )
 }
 
 
-#define CPU1_MEMORY(NAME,ROMSIZE,WORKRAM)									\
+#define CPU1_MEMORY(NAME, ROMSIZE, WORKRAM)									\
 static ADDRESS_MAP_START( NAME##_map, ADDRESS_SPACE_PROGRAM, 16 )						\
 	AM_RANGE(0x00000, ROMSIZE-1) AM_ROM									\
 	AM_RANGE(WORKRAM, WORKRAM+0x3fff) AM_RAM	/* work RAM */						\
-	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_BASE_SIZE_GENERIC(spriteram)					\
+	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_BASE_SIZE_MEMBER(m72_state, spriteram, spriteram_size)		\
 	AM_RANGE(0xc8000, 0xc8bff) AM_READWRITE(m72_palette1_r, m72_palette1_w) AM_BASE_GENERIC(paletteram)	\
 	AM_RANGE(0xcc000, 0xccbff) AM_READWRITE(m72_palette2_r, m72_palette2_w) AM_BASE_GENERIC(paletteram2)	\
 	AM_RANGE(0xd0000, 0xd3fff) AM_RAM_WRITE(m72_videoram1_w) AM_BASE_MEMBER(m72_state, videoram1)		\
@@ -916,7 +908,7 @@ static ADDRESS_MAP_START( xmultipl_map, ADDRESS_SPACE_PROGRAM, 16 )
 	AM_RANGE(0x00000, 0x7ffff) AM_ROM
 	AM_RANGE(0x9c000, 0x9ffff) AM_RAM	/* work RAM */
 	AM_RANGE(0xb0ffe, 0xb0fff) AM_WRITEONLY	/* leftover from protection?? */
-	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_BASE_SIZE_GENERIC(spriteram)
+	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_BASE_SIZE_MEMBER(m72_state, spriteram, spriteram_size)
 	AM_RANGE(0xc8000, 0xc8bff) AM_READWRITE(m72_palette1_r, m72_palette1_w) AM_BASE_GENERIC(paletteram)
 	AM_RANGE(0xcc000, 0xccbff) AM_READWRITE(m72_palette2_r, m72_palette2_w) AM_BASE_GENERIC(paletteram2)
 	AM_RANGE(0xd0000, 0xd3fff) AM_RAM_WRITE(m72_videoram1_w) AM_BASE_MEMBER(m72_state, videoram1)
@@ -928,7 +920,7 @@ static ADDRESS_MAP_START( dbreed_map, ADDRESS_SPACE_PROGRAM, 16 )
 	AM_RANGE(0x00000, 0x7ffff) AM_ROM
 	AM_RANGE(0x88000, 0x8bfff) AM_RAM	/* work RAM */
 	AM_RANGE(0xb0ffe, 0xb0fff) AM_WRITEONLY	/* leftover from protection?? */
-	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_BASE_SIZE_GENERIC(spriteram)
+	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_BASE_SIZE_MEMBER(m72_state, spriteram, spriteram_size)
 	AM_RANGE(0xc8000, 0xc8bff) AM_READWRITE(m72_palette1_r, m72_palette1_w) AM_BASE_GENERIC(paletteram)
 	AM_RANGE(0xcc000, 0xccbff) AM_READWRITE(m72_palette2_r, m72_palette2_w) AM_BASE_GENERIC(paletteram2)
 	AM_RANGE(0xd0000, 0xd3fff) AM_RAM_WRITE(m72_videoram1_w) AM_BASE_MEMBER(m72_state, videoram1)
@@ -940,7 +932,7 @@ static ADDRESS_MAP_START( rtype2_map, ADDRESS_SPACE_PROGRAM, 16 )
 	AM_RANGE(0x00000, 0x7ffff) AM_ROM
 	AM_RANGE(0xb0000, 0xb0001) AM_WRITE(m72_irq_line_w)
 	AM_RANGE(0xbc000, 0xbc001) AM_WRITE(m72_dmaon_w)
-	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_BASE_SIZE_GENERIC(spriteram)
+	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_BASE_SIZE_MEMBER(m72_state, spriteram, spriteram_size)
 	AM_RANGE(0xc8000, 0xc8bff) AM_READWRITE(m72_palette1_r, m72_palette1_w) AM_BASE_GENERIC(paletteram)
 	AM_RANGE(0xd0000, 0xd3fff) AM_RAM_WRITE(m72_videoram1_w) AM_BASE_MEMBER(m72_state, videoram1)
 	AM_RANGE(0xd4000, 0xd7fff) AM_RAM_WRITE(m72_videoram2_w) AM_BASE_MEMBER(m72_state, videoram2)
@@ -955,8 +947,8 @@ static ADDRESS_MAP_START( majtitle_map, ADDRESS_SPACE_PROGRAM, 16 )
 	AM_RANGE(0xa4000, 0xa4bff) AM_READWRITE(m72_palette2_r, m72_palette2_w) AM_BASE_GENERIC(paletteram2)
 	AM_RANGE(0xac000, 0xaffff) AM_RAM_WRITE(m72_videoram1_w) AM_BASE_MEMBER(m72_state, videoram1)
 	AM_RANGE(0xb0000, 0xbffff) AM_RAM_WRITE(m72_videoram2_w) AM_BASE_MEMBER(m72_state, videoram2)	/* larger than the other games */
-	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_BASE_SIZE_GENERIC(spriteram)
-	AM_RANGE(0xc8000, 0xc83ff) AM_RAM AM_BASE_GENERIC(spriteram2)
+	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_BASE_SIZE_MEMBER(m72_state, spriteram, spriteram_size)
+	AM_RANGE(0xc8000, 0xc83ff) AM_RAM AM_BASE_MEMBER(m72_state, spriteram2)
 	AM_RANGE(0xcc000, 0xccbff) AM_READWRITE(m72_palette1_r, m72_palette1_w) AM_BASE_GENERIC(paletteram)
 	AM_RANGE(0xd0000, 0xd3fff) AM_RAM	/* work RAM */
 	AM_RANGE(0xe0000, 0xe0001) AM_WRITE(m72_irq_line_w)
@@ -969,7 +961,7 @@ static ADDRESS_MAP_START( hharry_map, ADDRESS_SPACE_PROGRAM, 16 )
 	AM_RANGE(0x00000, 0x7ffff) AM_ROM
 	AM_RANGE(0xa0000, 0xa3fff) AM_RAM	/* work RAM */
 	AM_RANGE(0xb0ffe, 0xb0fff) AM_WRITEONLY	/* leftover from protection?? */
-	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_BASE_SIZE_GENERIC(spriteram)
+	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_BASE_SIZE_MEMBER(m72_state, spriteram, spriteram_size)
 	AM_RANGE(0xc8000, 0xc8bff) AM_READWRITE(m72_palette1_r, m72_palette1_w) AM_BASE_GENERIC(paletteram)
 	AM_RANGE(0xcc000, 0xccbff) AM_READWRITE(m72_palette2_r, m72_palette2_w) AM_BASE_GENERIC(paletteram2)
 	AM_RANGE(0xd0000, 0xd3fff) AM_RAM_WRITE(m72_videoram1_w) AM_BASE_MEMBER(m72_state, videoram1)
@@ -984,7 +976,7 @@ static ADDRESS_MAP_START( hharryu_map, ADDRESS_SPACE_PROGRAM, 16 )
 	AM_RANGE(0xb0000, 0xb0001) AM_WRITE(m72_irq_line_w)
 	AM_RANGE(0xbc000, 0xbc001) AM_WRITE(m72_dmaon_w)
 	AM_RANGE(0xb0ffe, 0xb0fff) AM_WRITEONLY	/* leftover from protection?? */
-	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_BASE_SIZE_GENERIC(spriteram)
+	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_BASE_SIZE_MEMBER(m72_state, spriteram, spriteram_size)
 	AM_RANGE(0xd0000, 0xd3fff) AM_RAM_WRITE(m72_videoram1_w) AM_BASE_MEMBER(m72_state, videoram1)
 	AM_RANGE(0xd4000, 0xd7fff) AM_RAM_WRITE(m72_videoram2_w) AM_BASE_MEMBER(m72_state, videoram2)
 	AM_RANGE(0xe0000, 0xe3fff) AM_RAM	/* work RAM */
@@ -996,7 +988,7 @@ static ADDRESS_MAP_START( airduelm82_map, ADDRESS_SPACE_PROGRAM, 16 )
 	AM_RANGE(0xcc000, 0xccbff) AM_READWRITE(m72_palette1_r, m72_palette1_w) AM_BASE_GENERIC(paletteram)
 	AM_RANGE(0xa4000, 0xa4bff) AM_READWRITE(m72_palette2_r, m72_palette2_w) AM_BASE_GENERIC(paletteram2)
 	AM_RANGE(0xec000, 0xec001) AM_WRITE(m72_dmaon_w)
-	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_BASE_SIZE_GENERIC(spriteram)
+	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_BASE_SIZE_MEMBER(m72_state, spriteram, spriteram_size)
 	AM_RANGE(0xac000, 0xaffff) AM_RAM_WRITE(m72_videoram1_w) AM_BASE_MEMBER(m72_state, videoram1)
 	AM_RANGE(0xb0000, 0xb3fff) AM_RAM_WRITE(m72_videoram2_w) AM_BASE_MEMBER(m72_state, videoram2)
 	AM_RANGE(0xd0000, 0xd3fff) AM_RAM	/* work RAM */
@@ -1010,7 +1002,7 @@ static ADDRESS_MAP_START( kengo_map, ADDRESS_SPACE_PROGRAM, 16 )
 	AM_RANGE(0xb0000, 0xb0001) AM_WRITE(m72_irq_line_w)
 	AM_RANGE(0xb4000, 0xb4001) AM_WRITENOP	/* ??? */
 	AM_RANGE(0xbc000, 0xbc001) AM_WRITE(m72_dmaon_w)
-	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_BASE_SIZE_GENERIC(spriteram)
+	AM_RANGE(0xc0000, 0xc03ff) AM_RAM AM_BASE_SIZE_MEMBER(m72_state, spriteram, spriteram_size)
 	AM_RANGE(0x80000, 0x83fff) AM_RAM_WRITE(m72_videoram1_w) AM_BASE_MEMBER(m72_state, videoram1)
 	AM_RANGE(0x84000, 0x87fff) AM_RAM_WRITE(m72_videoram2_w) AM_BASE_MEMBER(m72_state, videoram2)
 	AM_RANGE(0xe0000, 0xe3fff) AM_RAM	/* work RAM */
@@ -1948,7 +1940,7 @@ static MACHINE_DRIVER_START( rtype )
 	MDRV_CPU_ADD("maincpu", V30, MASTER_CLOCK/2/2)	/* 16 MHz external freq (8MHz internal) */
 	MDRV_CPU_PROGRAM_MAP(rtype_map)
 	MDRV_CPU_IO_MAP(m72_portmap)
-	MDRV_CPU_ADD("soundcpu",Z80, SOUND_CLOCK)
+	MDRV_CPU_ADD("soundcpu", Z80, SOUND_CLOCK)
 	MDRV_CPU_PROGRAM_MAP(sound_ram_map)
 	MDRV_CPU_IO_MAP(rtype_sound_portmap)
 	/* IRQs are generated by main Z80 and YM2151 */

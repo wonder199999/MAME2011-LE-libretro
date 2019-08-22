@@ -109,7 +109,7 @@ static void register_savestate(running_machine *machine)
 	state_save_register_global(machine, state->scrolly1);
 	state_save_register_global(machine, state->scrollx2);
 	state_save_register_global(machine, state->scrolly2);
-	state_save_register_global_pointer(machine, state->spriteram, machine->generic.spriteram_size / 2);
+	state_save_register_global_pointer(machine, state->buffered_spriteram, state->spriteram_size / 2);
 }
 
 
@@ -120,7 +120,7 @@ VIDEO_START( m72 )
 	state->bg_tilemap = tilemap_create(machine, m72_get_bg_tile_info, tilemap_scan_rows, 8, 8, 64, 64);
 	state->fg_tilemap = tilemap_create(machine, m72_get_fg_tile_info, tilemap_scan_rows, 8, 8, 64, 64);
 
-	state->spriteram = auto_alloc_array(machine, UINT16, machine->generic.spriteram_size / 2);
+	state->buffered_spriteram = auto_alloc_array(machine, UINT16, state->spriteram_size / 2);
 
 	tilemap_set_transmask(state->fg_tilemap, 0, 0xffff, 0x0001);
 	tilemap_set_transmask(state->fg_tilemap, 1, 0x00ff, 0xff01);
@@ -130,7 +130,7 @@ VIDEO_START( m72 )
 	tilemap_set_transmask(state->bg_tilemap, 1, 0x00ff, 0xff00);
 	tilemap_set_transmask(state->bg_tilemap, 2, 0x0007, 0xfff8);
 
-	memset(state->spriteram, 0, machine->generic.spriteram_size);
+	memset(state->buffered_spriteram, 0, state->spriteram_size);
 
 	tilemap_set_scrolldx(state->fg_tilemap, 0, 0);
 	tilemap_set_scrolldy(state->fg_tilemap, -128, 16);
@@ -148,7 +148,7 @@ VIDEO_START( rtype2 )
 	state->bg_tilemap = tilemap_create(machine, rtype2_get_bg_tile_info, tilemap_scan_rows, 8, 8, 64, 64);
 	state->fg_tilemap = tilemap_create(machine, rtype2_get_fg_tile_info, tilemap_scan_rows, 8, 8, 64, 64);
 
-	state->spriteram = auto_alloc_array(machine, UINT16, machine->generic.spriteram_size / 2);
+	state->buffered_spriteram = auto_alloc_array(machine, UINT16, state->spriteram_size / 2);
 
 	tilemap_set_transmask(state->fg_tilemap, 0, 0xffff, 0x0001);
 	tilemap_set_transmask(state->fg_tilemap, 1, 0x00ff, 0xff01);
@@ -158,7 +158,7 @@ VIDEO_START( rtype2 )
 	tilemap_set_transmask(state->bg_tilemap, 1, 0x00ff, 0xff00);
 	tilemap_set_transmask(state->bg_tilemap, 2, 0x0001, 0xfffe);
 
-	memset(state->spriteram, 0, machine->generic.spriteram_size);
+	memset(state->buffered_spriteram, 0, state->spriteram_size);
 
 	tilemap_set_scrolldx(state->fg_tilemap, 4, 0);
 	tilemap_set_scrolldy(state->fg_tilemap, -128, 16);
@@ -188,7 +188,7 @@ VIDEO_START( majtitle )
 	state->bg_tilemap = tilemap_create(machine, rtype2_get_bg_tile_info, majtitle_scan_rows, 8, 8, 128, 64);
 	state->fg_tilemap = tilemap_create(machine, rtype2_get_fg_tile_info, tilemap_scan_rows, 8, 8, 64, 64);
 
-	state->spriteram = auto_alloc_array(machine, UINT16, machine->generic.spriteram_size / 2);
+	state->buffered_spriteram = auto_alloc_array(machine, UINT16, state->spriteram_size / 2);
 
 	tilemap_set_transmask(state->fg_tilemap, 0, 0xffff, 0x0001);
 	tilemap_set_transmask(state->fg_tilemap, 1, 0x00ff, 0xff01);
@@ -198,7 +198,7 @@ VIDEO_START( majtitle )
 	tilemap_set_transmask(state->bg_tilemap, 1, 0x00ff, 0xff00);
 	tilemap_set_transmask(state->bg_tilemap, 2, 0x0001, 0xfffe);
 
-	memset(state->spriteram, 0, machine->generic.spriteram_size);
+	memset(state->buffered_spriteram, 0, state->spriteram_size);
 
 	tilemap_set_scrolldx(state->fg_tilemap, 4, 0);
 	tilemap_set_scrolldy(state->fg_tilemap, -128, 16);
@@ -216,7 +216,7 @@ VIDEO_START( hharry )
 	state->bg_tilemap = tilemap_create(machine, hharry_get_bg_tile_info, tilemap_scan_rows, 8, 8, 64, 64);
 	state->fg_tilemap = tilemap_create(machine, m72_get_fg_tile_info, tilemap_scan_rows, 8, 8, 64, 64);
 
-	state->spriteram = auto_alloc_array(machine, UINT16, machine->generic.spriteram_size / 2);
+	state->buffered_spriteram = auto_alloc_array(machine, UINT16, state->spriteram_size / 2);
 
 	tilemap_set_transmask(state->fg_tilemap, 0, 0xffff, 0x0001);
 	tilemap_set_transmask(state->fg_tilemap, 1, 0x00ff, 0xff01);
@@ -226,7 +226,7 @@ VIDEO_START( hharry )
 	tilemap_set_transmask(state->bg_tilemap, 1, 0x00ff, 0xff00);
 	tilemap_set_transmask(state->bg_tilemap, 2, 0x0001, 0xfffe);
 
-	memset(state->spriteram, 0, machine->generic.spriteram_size);
+	memset(state->buffered_spriteram, 0, state->spriteram_size);
 
 	tilemap_set_scrolldx(state->fg_tilemap, 4, 0);
 	tilemap_set_scrolldy(state->fg_tilemap, -128, 16);
@@ -344,7 +344,7 @@ WRITE16_HANDLER( m72_dmaon_w )
 	if (ACCESSING_BITS_0_7)
 	{
 		m72_state *state = space->machine->driver_data<m72_state>();
-		memcpy(state->spriteram, space->machine->generic.spriteram.u16, space->machine->generic.spriteram_size);
+		memcpy(state->buffered_spriteram, state->spriteram, state->spriteram_size);
 	}
 }
 
@@ -366,9 +366,9 @@ WRITE16_HANDLER( m72_port02_w )
 
 		/* bit 4 resets sound CPU (active low) */
 		if (data & 0x10)
-			cputag_set_input_line(space->machine, "soundcpu", INPUT_LINE_RESET, CLEAR_LINE);
+			cpu_set_input_line(state->sndcpu, INPUT_LINE_RESET, CLEAR_LINE);
 		else
-			cputag_set_input_line(space->machine, "soundcpu", INPUT_LINE_RESET, ASSERT_LINE);
+			cpu_set_input_line(state->sndcpu, INPUT_LINE_RESET, ASSERT_LINE);
 
 		/* bit 5 = "bank"? */
 	}
@@ -415,20 +415,21 @@ static void m72_draw_sprites(running_machine *machine, bitmap_t *bitmap, const r
 {
 	m72_state *state = machine->driver_data<m72_state>();
 
+	UINT16 *sprite = state->buffered_spriteram;
 	INT32 code, color, sx, sy, flipx, flipy, c, w, h, x, y;
-	const UINT32 size = machine->generic.spriteram_size / 2;
+	const UINT32 size = state->spriteram_size / 2;
 
 	for (UINT32 offs = 0; offs < size; offs += w << 2)
 	{
-		code = state->spriteram[offs + 1];
-		color = state->spriteram[offs + 2] & 0x0f;
-		sx = -256 + (state->spriteram[offs + 3] & 0x3ff);
-		sy = 384 - (state->spriteram[offs + 0] & 0x1ff);
-		flipx = state->spriteram[offs + 2] & 0x0800;
-		flipy = state->spriteram[offs + 2] & 0x0400;
+		code = sprite[offs + 1];
+		color = sprite[offs + 2] & 0x0f;
+		sx = -256 + (sprite[offs + 3] & 0x3ff);
+		sy = 384 - (sprite[offs + 0] & 0x1ff);
+		flipx = sprite[offs + 2] & 0x0800;
+		flipy = sprite[offs + 2] & 0x0400;
 
-		w = 1 << ((state->spriteram[offs + 2] & 0xc000) >> 14);
-		h = 1 << ((state->spriteram[offs + 2] & 0x3000) >> 12);
+		w = 1 << ((sprite[offs + 2] & 0xc000) >> 14);
+		h = 1 << ((sprite[offs + 2] & 0x3000) >> 12);
 		sy -= 16 * h;
 
 		if (flip_screen_get(machine))
@@ -465,21 +466,22 @@ static void m72_draw_sprites(running_machine *machine, bitmap_t *bitmap, const r
 
 static void majtitle_draw_sprites(running_machine *machine, bitmap_t *bitmap, const rectangle *cliprect)
 {
-	UINT16 *spriteram16_2 = machine->generic.spriteram2.u16;
+	m72_state *state = machine->driver_data<m72_state>();
 
+	UINT16 *sprite2 = state->spriteram2;
 	INT32 code, color, sx, sy, flipx, flipy, c, w, h, x, y;
 
-	for (UINT32 offs = 0; offs < machine->generic.spriteram_size; offs += 4)
+	for (UINT32 offs = 0; offs < state->spriteram_size; offs += 4)
 	{
-		code = spriteram16_2[offs + 1];
-		color = spriteram16_2[offs + 2] & 0x0f;
-		sx = -256 + (spriteram16_2[offs + 3] & 0x03ff);
-		sy = 384 - (spriteram16_2[offs + 0] & 0x01ff);
-		flipx = spriteram16_2[offs + 2] & 0x0800;
-		flipy = spriteram16_2[offs + 2] & 0x0400;
+		code = sprite2[offs + 1];
+		color = sprite2[offs + 2] & 0x0f;
+		sx = -256 + (sprite2[offs + 3] & 0x03ff);
+		sy = 384 - (sprite2[offs + 0] & 0x01ff);
+		flipx = sprite2[offs + 2] & 0x0800;
+		flipy = sprite2[offs + 2] & 0x0400;
 
 		w = 1;
-		h = 1 << ((spriteram16_2[offs + 2] & 0x3000) >> 12);
+		h = 1 << ((sprite2[offs + 2] & 0x3000) >> 12);
 		sy -= 16 * h;
 
 		if (flip_screen_get(machine))
