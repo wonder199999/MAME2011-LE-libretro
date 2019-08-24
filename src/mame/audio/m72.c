@@ -57,6 +57,13 @@ Shisensho II                            1993  Rev 3.34 M81  Yes
 
 */
 
+static struct m72audio
+{
+	UINT8	       *samples;
+	UINT32		sample_addr;
+	UINT32		samples_size;
+	UINT8		irq_vector;
+} audio;
 
 enum
 {
@@ -67,47 +74,45 @@ enum
 	Z80_CLEAR
 };
 
-static UINT8 irqvector;
-static UINT32 sample_addr;
-
 static TIMER_CALLBACK( setvector_callback )
 {
-	switch(param)
+	switch (param)
 	{
 		case VECTOR_INIT:
-			irqvector = 0xff;
-			break;
-
+			audio.irq_vector  = 0xff;
+		break;
 		case YM2151_ASSERT:
-			irqvector &= 0xef;
-			break;
-
+			audio.irq_vector &= 0xef;
+		break;
 		case YM2151_CLEAR:
-			irqvector |= 0x10;
-			break;
-
+			audio.irq_vector |= 0x10;
+		break;
 		case Z80_ASSERT:
-			irqvector &= 0xdf;
-			break;
-
+			audio.irq_vector &= 0xdf;
+		break;
 		case Z80_CLEAR:
-			irqvector |= 0x20;
-			break;
+			audio.irq_vector |= 0x20;
+		break;
 	}
 
-	if (irqvector == 0)
+	if (audio.irq_vector == 0)
 		logerror("You didn't call m72_init_sound()\n");
 
-	if (irqvector == 0xff)	/* no IRQs pending */
-		cputag_set_input_line_and_vector(machine, "soundcpu",0,CLEAR_LINE, irqvector);
-	else	/* IRQ pending */
-		cputag_set_input_line_and_vector(machine, "soundcpu",0,ASSERT_LINE, irqvector);
+	/* no IRQs pending */
+	if (audio.irq_vector == 0xff)
+		cputag_set_input_line_and_vector(machine, "soundcpu", 0, CLEAR_LINE, audio.irq_vector);
+	/* IRQ pending */
+	else
+		cputag_set_input_line_and_vector(machine, "soundcpu", 0, ASSERT_LINE, audio.irq_vector);
 }
 
 SOUND_START( m72 )
 {
-	state_save_register_global(machine, irqvector);
-	state_save_register_global(machine, sample_addr);
+	audio.samples = memory_region(machine, "samples");
+	audio.samples_size = memory_region_length(machine, "samples");
+
+	state_save_register_global(machine, audio.irq_vector);
+	state_save_register_global(machine, audio.sample_addr);
 }
 
 SOUND_RESET( m72 )
@@ -117,94 +122,89 @@ SOUND_RESET( m72 )
 
 void m72_ym2151_irq_handler(running_device *device, int irq)
 {
-	if (irq)
-		timer_call_after_resynch(device->machine, NULL, YM2151_ASSERT,setvector_callback);
-	else
-		timer_call_after_resynch(device->machine, NULL, YM2151_CLEAR,setvector_callback);
+	timer_call_after_resynch(device->machine, NULL, irq ? YM2151_ASSERT : YM2151_CLEAR, setvector_callback);
 }
 
 WRITE16_HANDLER( m72_sound_command_w )
 {
 	if (ACCESSING_BITS_0_7)
 	{
-		soundlatch_w(space,offset,data);
-		timer_call_after_resynch(space->machine, NULL, Z80_ASSERT,setvector_callback);
+		soundlatch_w(space, offset, data);
+		timer_call_after_resynch(space->machine, NULL, Z80_ASSERT, setvector_callback);
 	}
 }
 
 WRITE8_HANDLER( m72_sound_command_byte_w )
 {
-	soundlatch_w(space,offset,data);
-	timer_call_after_resynch(space->machine, NULL, Z80_ASSERT,setvector_callback);
+	soundlatch_w(space, offset, data);
+	timer_call_after_resynch(space->machine, NULL, Z80_ASSERT, setvector_callback);
 }
 
 WRITE8_HANDLER( m72_sound_irq_ack_w )
 {
-	timer_call_after_resynch(space->machine, NULL, Z80_CLEAR,setvector_callback);
+	timer_call_after_resynch(space->machine, NULL, Z80_CLEAR, setvector_callback);
 }
-
-
 
 void m72_set_sample_start(int start)
 {
-	sample_addr = start;
+	audio.sample_addr = start;
 }
 
 WRITE8_HANDLER( vigilant_sample_addr_w )
 {
 	if (offset == 1)
-		sample_addr = (sample_addr & 0x00ff) | ((data << 8) & 0xff00);
+		audio.sample_addr = (audio.sample_addr & 0x00ff) | ((data << 8) & 0xff00);
 	else
-		sample_addr = (sample_addr & 0xff00) | ((data << 0) & 0x00ff);
+		audio.sample_addr = (audio.sample_addr & 0xff00) | ((data << 0) & 0x00ff);
 }
 
 WRITE8_HANDLER( shisen_sample_addr_w )
 {
-	sample_addr >>= 2;
+	audio.sample_addr >>= 2;
 
 	if (offset == 1)
-		sample_addr = (sample_addr & 0x00ff) | ((data << 8) & 0xff00);
+		audio.sample_addr = (audio.sample_addr & 0x00ff) | ((data << 8) & 0xff00);
 	else
-		sample_addr = (sample_addr & 0xff00) | ((data << 0) & 0x00ff);
+		audio.sample_addr = (audio.sample_addr & 0xff00) | ((data << 0) & 0x00ff);
 
-	sample_addr <<= 2;
+	audio.sample_addr <<= 2;
 }
 
 WRITE8_HANDLER( rtype2_sample_addr_w )
 {
-	sample_addr >>= 5;
+	audio.sample_addr >>= 5;
 
 	if (offset == 1)
-		sample_addr = (sample_addr & 0x00ff) | ((data << 8) & 0xff00);
+		audio.sample_addr = (audio.sample_addr & 0x00ff) | ((data << 8) & 0xff00);
 	else
-		sample_addr = (sample_addr & 0xff00) | ((data << 0) & 0x00ff);
+		audio.sample_addr = (audio.sample_addr & 0xff00) | ((data << 0) & 0x00ff);
 
-	sample_addr <<= 5;
+	audio.sample_addr <<= 5;
 }
 
 WRITE8_HANDLER( poundfor_sample_addr_w )
 {
 	/* poundfor writes both sample start and sample END - a first for Irem...
-       we don't handle the end written here, 00 marks the sample end as usual. */
+	   we don't handle the end written here, 00 marks the sample end as usual. */
 	if (offset > 1) return;
 
-	sample_addr >>= 4;
+	audio.sample_addr >>= 4;
 
 	if (offset == 1)
-		sample_addr = (sample_addr & 0x00ff) | ((data << 8) & 0xff00);
+		audio.sample_addr = (audio.sample_addr & 0x00ff) | ((data << 8) & 0xff00);
 	else
-		sample_addr = (sample_addr & 0xff00) | ((data << 0) & 0x00ff);
+		audio.sample_addr = (audio.sample_addr & 0xff00) | ((data << 0) & 0x00ff);
 
-	sample_addr <<= 4;
+	audio.sample_addr <<= 4;
 }
 
 READ8_HANDLER( m72_sample_r )
 {
-	return memory_region(space->machine, "samples")[sample_addr];
+	return audio.samples[audio.sample_addr];
 }
 
 WRITE8_DEVICE_HANDLER( m72_sample_w )
 {
 	dac_signed_data_w(device, data);
-	sample_addr = (sample_addr + 1) & (memory_region_length(device->machine, "samples") - 1);
+	audio.sample_addr = (audio.sample_addr + 1) & (audio.samples_size - 1);
 }
