@@ -57,13 +57,6 @@ Shisensho II                            1993  Rev 3.34 M81  Yes
 
 */
 
-static struct m72audio
-{
-	UINT8	       *samples;
-	UINT32		sample_addr;
-	UINT32		samples_size;
-	UINT8		irq_vector;
-} audio;
 
 enum
 {
@@ -74,137 +67,199 @@ enum
 	Z80_CLEAR
 };
 
+typedef struct _m72_audio_state m72_audio_state;
+struct _m72_audio_state
+{
+	address_space	*sndio;
+	running_device	*dac;
+	UINT8		*samples;
+	UINT32		sample_addr;
+	UINT32		samples_size;
+	UINT8		irqvector;
+};
+
+INLINE m72_audio_state *get_safe_token(running_device *device)
+{
+	assert(device != NULL);
+	assert(device->type() == M72);
+
+	return (m72_audio_state *)downcast<legacy_device_base *>(device)->token();
+}
+
 static TIMER_CALLBACK( setvector_callback )
 {
+	m72_audio_state *state = (m72_audio_state *)ptr;
+
 	switch (param)
 	{
 		case VECTOR_INIT:
-			audio.irq_vector  = 0xff;
+			state->irqvector = 0xff;
 		break;
 		case YM2151_ASSERT:
-			audio.irq_vector &= 0xef;
+			state->irqvector &= 0xef;
 		break;
 		case YM2151_CLEAR:
-			audio.irq_vector |= 0x10;
+			state->irqvector |= 0x10;
 		break;
 		case Z80_ASSERT:
-			audio.irq_vector &= 0xdf;
+			state->irqvector &= 0xdf;
 		break;
 		case Z80_CLEAR:
-			audio.irq_vector |= 0x20;
+			state->irqvector |= 0x20;
 		break;
 	}
 
-	if (audio.irq_vector == 0)
-		logerror("You didn't call m72_init_sound()\n");
-
-	/* no IRQs pending */
-	if (audio.irq_vector == 0xff)
-		cputag_set_input_line_and_vector(machine, "soundcpu", 0, CLEAR_LINE, audio.irq_vector);
-	/* IRQ pending */
-	else
-		cputag_set_input_line_and_vector(machine, "soundcpu", 0, ASSERT_LINE, audio.irq_vector);
+	cputag_set_input_line_and_vector(machine, "soundcpu", 0, (state->irqvector == 0xff) ? CLEAR_LINE : ASSERT_LINE, state->irqvector);
 }
 
-SOUND_START( m72 )
+static DEVICE_START( m72_audio )
 {
-	audio.samples = memory_region(machine, "samples");
-	audio.samples_size = memory_region_length(machine, "samples");
+	m72_audio_state *state = get_safe_token(device);
+	running_machine *level = device->machine;
 
-	state_save_register_global(machine, audio.irq_vector);
-	state_save_register_global(machine, audio.sample_addr);
+	state->samples = memory_region(level, "samples");
+	state->samples_size = memory_region_length(level, "samples");
+	state->sndio = cputag_get_address_space(level, "soundcpu", ADDRESS_SPACE_IO);
+	state->dac = level->device("dac");
+
+	state_save_register_global(level, state->irqvector);
+	state_save_register_global(level, state->sample_addr);
 }
 
-SOUND_RESET( m72 )
+static DEVICE_RESET( m72_audio )
 {
-	setvector_callback(machine, NULL, VECTOR_INIT);
+	m72_audio_state *state = get_safe_token(device);
+
+	setvector_callback(device->machine, state, VECTOR_INIT);
 }
 
 void m72_ym2151_irq_handler(running_device *device, int irq)
 {
-	timer_call_after_resynch(device->machine, NULL, irq ? YM2151_ASSERT : YM2151_CLEAR, setvector_callback);
+	running_device *chip = device->machine->device("m72");
+	m72_audio_state *state = get_safe_token(chip);
+
+	timer_call_after_resynch(device->machine, state, irq ? YM2151_ASSERT : YM2151_CLEAR, setvector_callback);
 }
 
-WRITE16_HANDLER( m72_sound_command_w )
+WRITE16_DEVICE_HANDLER( m72_sound_command_w )
 {
 	if (ACCESSING_BITS_0_7)
 	{
-		soundlatch_w(space, offset, data);
-		timer_call_after_resynch(space->machine, NULL, Z80_ASSERT, setvector_callback);
+		m72_audio_state *state = get_safe_token(device);
+
+		soundlatch_w(state->sndio, offset, data);
+		timer_call_after_resynch(device->machine, state, Z80_ASSERT, setvector_callback);
 	}
 }
 
-WRITE8_HANDLER( m72_sound_command_byte_w )
+WRITE8_DEVICE_HANDLER( m72_sound_command_byte_w )
 {
-	soundlatch_w(space, offset, data);
-	timer_call_after_resynch(space->machine, NULL, Z80_ASSERT, setvector_callback);
+	m72_audio_state *state = get_safe_token(device);
+
+	soundlatch_w(state->sndio, offset, data);
+	timer_call_after_resynch(device->machine, state, Z80_ASSERT, setvector_callback);
 }
 
-WRITE8_HANDLER( m72_sound_irq_ack_w )
+WRITE8_DEVICE_HANDLER( m72_sound_irq_ack_w )
 {
-	timer_call_after_resynch(space->machine, NULL, Z80_CLEAR, setvector_callback);
+	m72_audio_state *state = get_safe_token(device);
+	timer_call_after_resynch(device->machine, state, Z80_CLEAR, setvector_callback);
 }
 
-void m72_set_sample_start(int start)
+void m72_set_sample_start(running_device *device, int start)
 {
-	audio.sample_addr = start;
+	m72_audio_state *state = get_safe_token(device);
+
+	state->sample_addr = start;
 }
 
-WRITE8_HANDLER( vigilant_sample_addr_w )
+WRITE8_DEVICE_HANDLER( vigilant_sample_addr_w )
 {
-	if (offset == 1)
-		audio.sample_addr = (audio.sample_addr & 0x00ff) | ((data << 8) & 0xff00);
-	else
-		audio.sample_addr = (audio.sample_addr & 0xff00) | ((data << 0) & 0x00ff);
-}
-
-WRITE8_HANDLER( shisen_sample_addr_w )
-{
-	audio.sample_addr >>= 2;
+	m72_audio_state *state = get_safe_token(device);
 
 	if (offset == 1)
-		audio.sample_addr = (audio.sample_addr & 0x00ff) | ((data << 8) & 0xff00);
+		state->sample_addr = (state->sample_addr & 0x00ff) | ((data << 8) & 0xff00);
 	else
-		audio.sample_addr = (audio.sample_addr & 0xff00) | ((data << 0) & 0x00ff);
-
-	audio.sample_addr <<= 2;
+		state->sample_addr = (state->sample_addr & 0xff00) | ((data << 0) & 0x00ff);
 }
 
-WRITE8_HANDLER( rtype2_sample_addr_w )
+WRITE8_DEVICE_HANDLER( shisen_sample_addr_w )
 {
-	audio.sample_addr >>= 5;
+	m72_audio_state *state = get_safe_token(device);
+
+	state->sample_addr >>= 2;
 
 	if (offset == 1)
-		audio.sample_addr = (audio.sample_addr & 0x00ff) | ((data << 8) & 0xff00);
+		state->sample_addr = (state->sample_addr & 0x00ff) | ((data << 8) & 0xff00);
 	else
-		audio.sample_addr = (audio.sample_addr & 0xff00) | ((data << 0) & 0x00ff);
+		state->sample_addr = (state->sample_addr & 0xff00) | ((data << 0) & 0x00ff);
 
-	audio.sample_addr <<= 5;
+	state->sample_addr <<= 2;
 }
 
-WRITE8_HANDLER( poundfor_sample_addr_w )
+WRITE8_DEVICE_HANDLER( rtype2_sample_addr_w )
+{
+	m72_audio_state *state = get_safe_token(device);
+
+	state->sample_addr >>= 5;
+
+	if (offset == 1)
+		state->sample_addr = (state->sample_addr & 0x00ff) | ((data << 8) & 0xff00);
+	else
+		state->sample_addr = (state->sample_addr & 0xff00) | ((data << 0) & 0x00ff);
+
+	state->sample_addr <<= 5;
+}
+
+WRITE8_DEVICE_HANDLER( poundfor_sample_addr_w )
 {
 	/* poundfor writes both sample start and sample END - a first for Irem...
 	   we don't handle the end written here, 00 marks the sample end as usual. */
 	if (offset > 1) return;
 
-	audio.sample_addr >>= 4;
+	m72_audio_state *state = get_safe_token(device);
+
+	state->sample_addr >>= 4;
 
 	if (offset == 1)
-		audio.sample_addr = (audio.sample_addr & 0x00ff) | ((data << 8) & 0xff00);
+		state->sample_addr = (state->sample_addr & 0x00ff) | ((data << 8) & 0xff00);
 	else
-		audio.sample_addr = (audio.sample_addr & 0xff00) | ((data << 0) & 0x00ff);
+		state->sample_addr = (state->sample_addr & 0xff00) | ((data << 0) & 0x00ff);
 
-	audio.sample_addr <<= 4;
+	state->sample_addr <<= 4;
 }
 
-READ8_HANDLER( m72_sample_r )
+READ8_DEVICE_HANDLER( m72_sample_r )
 {
-	return audio.samples[audio.sample_addr];
+	m72_audio_state *state = get_safe_token(device);
+
+	return state->samples[state->sample_addr];
 }
 
 WRITE8_DEVICE_HANDLER( m72_sample_w )
 {
-	dac_signed_data_w(device, data);
-	audio.sample_addr = (audio.sample_addr + 1) & (audio.samples_size - 1);
+	m72_audio_state *state = get_safe_token(device);
+
+	dac_signed_data_w(state->dac, data);
+	state->sample_addr = (state->sample_addr + 1) & (state->samples_size - 1);
 }
+
+DEVICE_GET_INFO( m72_audio )
+{
+	switch (state)
+	{
+		/* --- the following bits of info are returned as 64-bit signed integers --- */
+		case DEVINFO_INT_TOKEN_BYTES:		info->i = sizeof(m72_audio_state);	break;
+
+		/* --- the following bits of info are returned as pointers to data or functions --- */
+		case DEVINFO_FCT_START:		info->start = DEVICE_START_NAME(m72_audio);	break;
+		case DEVINFO_FCT_RESET:		info->start = DEVICE_RESET_NAME(m72_audio);	break;
+		case DEVINFO_FCT_STOP:		break;	/* nothing */
+
+		/* --- the following bits of info are returned as NULL-terminated strings --- */
+		case DEVINFO_STR_NAME:				strcpy(info->s, "M72 Audio Custom");	break;
+		case DEVINFO_STR_SOURCE_FILE:			strcpy(info->s, __FILE__);	break;
+	}
+}
+
+DEFINE_LEGACY_SOUND_DEVICE(M72, m72_audio);

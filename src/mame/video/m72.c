@@ -365,10 +365,7 @@ WRITE16_HANDLER( m72_port02_w )
 		state->video_off = data & 0x08;
 
 		/* bit 4 resets sound CPU (active low) */
-		if (data & 0x10)
-			cpu_set_input_line(state->sndcpu, INPUT_LINE_RESET, CLEAR_LINE);
-		else
-			cpu_set_input_line(state->sndcpu, INPUT_LINE_RESET, ASSERT_LINE);
+		cpu_set_input_line(state->sndcpu, INPUT_LINE_RESET, (data & 0x10) ? CLEAR_LINE : ASSERT_LINE);
 
 		/* bit 5 = "bank"? */
 	}
@@ -416,7 +413,7 @@ static void m72_draw_sprites(running_machine *machine, bitmap_t *bitmap, const r
 	m72_state *state = machine->driver_data<m72_state>();
 
 	UINT16 *sprite = state->buffered_spriteram;
-	INT32 code, color, sx, sy, flipx, flipy, c, w, h, x, y;
+	INT32 code, color, sx, sy, flipx, flipy, c, w, h;
 	const UINT32 size = state->spriteram_size / 2;
 
 	for (UINT32 offs = 0; offs < size; offs += w << 2)
@@ -440,9 +437,9 @@ static void m72_draw_sprites(running_machine *machine, bitmap_t *bitmap, const r
 			flipy = !flipy;
 		}
 
-		for (x = 0; x < w; x++)
+		for (UINT32 x = 0; x < w; x++)
 		{
-			for (y = 0; y < h; y++)
+			for (UINT32 y = 0; y < h; y++)
 			{
 				c = code;
 
@@ -451,7 +448,7 @@ static void m72_draw_sprites(running_machine *machine, bitmap_t *bitmap, const r
 				else
 					c += 8 * x;
 				if (flipy)
-					c += h - 1 -y;
+					c += h - 1 - y;
 				else
 					c += y;
 
@@ -469,7 +466,7 @@ static void majtitle_draw_sprites(running_machine *machine, bitmap_t *bitmap, co
 	m72_state *state = machine->driver_data<m72_state>();
 
 	UINT16 *sprite2 = state->spriteram2;
-	INT32 code, color, sx, sy, flipx, flipy, c, w, h, x, y;
+	INT32 code, color, sx, sy, flipx, flipy, c, w, h;
 
 	for (UINT32 offs = 0; offs < state->spriteram_size; offs += 4)
 	{
@@ -492,9 +489,9 @@ static void majtitle_draw_sprites(running_machine *machine, bitmap_t *bitmap, co
 			flipy = !flipy;
 		}
 
-		for (x = 0; x < w; x++)
+		for (UINT32 x = 0; x < w; x++)
 		{
-			for (y = 0; y < h; y++)
+			for (UINT32 y = 0; y < h; y++)
 			{
 				c = code;
 

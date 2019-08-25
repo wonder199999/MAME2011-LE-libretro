@@ -31,7 +31,6 @@ public:
 	running_device	*maincpu;
 	running_device	*sndcpu;
 	running_device	*mcu;
-	running_device	*dac;
 	running_device	*m72audio;
 
 	/* memory pointers */

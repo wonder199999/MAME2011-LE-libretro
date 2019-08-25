@@ -110,23 +110,25 @@ DRVLIBS = \
 # the following files are general components and
 # shared across a number of drivers
 #-------------------------------------------------
-
-$(MAMEOBJ)/capcom.a: \
+CAPCOMOBJS = \
 	$(DRIVERS)/capcom/cps1.o $(VIDEO)/cps1.o \
 	$(DRIVERS)/capcom/cps2.o \
 	$(DRIVERS)/capcom/fcrash.o \
-	$(MACHINE)/cps2crpt.o $(MACHINE)/kabuki.o \
+	$(MACHINE)/cps2crpt.o $(MACHINE)/kabuki.o
 
-$(MAMEOBJ)/irem.a: \
+IREMOBJS = \
 	$(DRIVERS)/irem/m72.o $(AUDIO)/m72.o $(VIDEO)/m72.o \
 	$(DRIVERS)/irem/m92.o $(VIDEO)/m92.o \
-	$(MACHINE)/irem_cpu.o \
+	$(MACHINE)/irem_cpu.o
 
-$(MAMEOBJ)/neogeo.a: \
-	$(DRIVERS)/neogeo/neogeo.o $(VIDEO)/neogeo.o \
-	$(MACHINE)/neoboot.o $(MACHINE)/neocrypt.o $(MACHINE)/neoprot.o \
+NEOGEOOBJS = \
+	$(DRIVERS)/neogeo/neogeo.o \
+	$(VIDEO)/neogeo.o \
+	$(MACHINE)/neoboot.o \
+	$(MACHINE)/neocrypt.o \
+	$(MACHINE)/neoprot.o
 
-$(MAMEOBJ)/technos.a: \
+TECHNOSOBJS = \
 	$(DRIVERS)/technos/ddragon.o $(VIDEO)/ddragon.o \
 	$(DRIVERS)/technos/ddragon3.o $(VIDEO)/ddragon3.o \
 	$(DRIVERS)/technos/xain.o $(VIDEO)/xain.o \
@@ -136,13 +138,19 @@ $(MAMEOBJ)/technos.a: \
 	$(DRIVERS)/technos/shadfrce.o $(VIDEO)/shadfrce.o \
 	$(DRIVERS)/technos/renegade.o $(VIDEO)/renegade.o \
 	$(DRIVERS)/technos/blockout.o $(VIDEO)/blockout.o \
-	$(DRIVERS)/technos/mystston.o $(VIDEO)/mystston.o \
+	$(DRIVERS)/technos/mystston.o $(VIDEO)/mystston.o
 
-$(MAMEOBJ)/igs.a: \
+IGSOBJS = \
 	$(DRIVERS)/igs/pgm.o $(VIDEO)/pgm.o \
-	$(MACHINE)/pgmcrypt.o $(MACHINE)/pgmprot.o \
+	$(MACHINE)/pgmcrypt.o $(MACHINE)/pgmprot.o
 
-$(DRIVERS)/neogeo.o:	$(MAMESRC)/drivers/neogeo/neogeo.inc
+
+$(MAMEOBJ)/capcom.a:	$(CAPCOMOBJS)
+$(MAMEOBJ)/irem.a:	$(IREMOBJS)
+$(MAMEOBJ)/neogeo.a:	$(NEOGEOOBJS)
+$(MAMEOBJ)/technos.a:	$(TECHNOSOBJS)
+$(MAMEOBJ)/igs.a:	$(IGSOBJS)
+
 
 #-------------------------------------------------
 # mame emulator core build
@@ -245,7 +253,6 @@ EMUOBJS = \
 	$(EMUOBJ)/debug/express.o \
 	$(EMUOBJ)/debug/textbuf.o \
 	$(EMUOBJ)/debugint/debugint.o
-
 
 EMUSOUNDOBJS = \
 	$(EMUOBJ)/sound/filter.o \
@@ -638,11 +645,11 @@ UTILOBJS = \
 
 $(OBJ)/libutil.a: $(UTILOBJS)
 
-# ifeq ($(PTR64), 1)
-# ifeq ($(shell echo `$(CC) -dumpversion` ">= 7" | bc -l), 1)
-# $(LIBOBJ)/util/options.o: CFLAGS += -fno-optimize-strlen
-# endif
-# endif
+ifeq ($(PTR64), 1)
+ifeq ($(shell echo `$(CC) -dumpversion` ">= 7" | bc -l), 1)
+$(LIBOBJ)/util/options.o: CFLAGS += -fno-optimize-strlen
+endif
+endif
 
 #-------------------------------------------------
 # expat library objects

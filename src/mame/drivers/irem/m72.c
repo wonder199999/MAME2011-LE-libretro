@@ -91,6 +91,7 @@ other supported games as well.
 #include "audio/m72.h"
 #include "sound/dac.h"
 #include "sound/2151intf.h"
+
 #include "includes/iremipt.h"
 #include "includes/m72.h"
 
@@ -110,8 +111,8 @@ static MACHINE_START( m72 )
 
 	state->maincpu = machine->device("maincpu");
 	state->sndcpu = machine->device("soundcpu");
-	state->dac = machine->device("dac");
 	state->mcu = machine->device("mcu");
+	state->m72audio = machine->device("m72");
 
 	state->scanline_timer = timer_alloc(machine, m72_scanline_interrupt, NULL);
 
@@ -351,12 +352,10 @@ static INTERRUPT_GEN( m72_mcu_int )
 static INTERRUPT_GEN( fake_nmi )
 {
 	m72_state *state = device->machine->driver_data<m72_state>();
-	address_space *space = cpu_get_address_space(device, ADDRESS_SPACE_PROGRAM);
 
-	int sample = m72_sample_r(space, 0);
-
+	int sample = m72_sample_r(state->m72audio, 0);
 	if (sample)
-		m72_sample_w(state->dac, 0, sample);
+		m72_sample_w(state->m72audio, 0, sample);
 }
 
 struct _sample_data sample_data = {
@@ -390,55 +389,82 @@ struct _sample_data sample_data = {
 static WRITE16_HANDLER( bchopper_sample_trigger_w )
 {
 	if (ACCESSING_BITS_0_7 && (data & 0xff) < 6)
-		m72_set_sample_start(sample_data.bchopper[data & 0xff]);
+	{
+		m72_state *state = space->machine->driver_data<m72_state>();
+		m72_set_sample_start(state->m72audio, sample_data.bchopper[data & 0xff]);
+	}
 }
 
 static WRITE16_HANDLER( nspirit_sample_trigger_w )
 {
 	if (ACCESSING_BITS_0_7 && (data & 0xff) < 9)
-		m72_set_sample_start(sample_data.nspirit[data & 0xff]);
+	{
+		m72_state *state = space->machine->driver_data<m72_state>();
+		m72_set_sample_start(state->m72audio, sample_data.nspirit[data & 0xff]);
+	}
 }
 
 static WRITE16_HANDLER( imgfight_sample_trigger_w )
 {
 	if (ACCESSING_BITS_0_7 && (data & 0xff) < 7)
-		m72_set_sample_start(sample_data.imgfight[data & 0xff]);
+	{
+		m72_state *state = space->machine->driver_data<m72_state>();
+		m72_set_sample_start(state->m72audio, sample_data.imgfight[data & 0xff]);
+	}
 }
 
 static WRITE16_HANDLER( loht_sample_trigger_w )
 {
 	if (ACCESSING_BITS_0_7 && (data & 0xff) < 7)
-		m72_set_sample_start(sample_data.loht[data & 0xff]);
+	{
+		m72_state *state = space->machine->driver_data<m72_state>();
+		m72_set_sample_start(state->m72audio, sample_data.loht[data & 0xff]);
+	}
 }
 
 static WRITE16_HANDLER( xmultiplm72_sample_trigger_w )
 {
 	if (ACCESSING_BITS_0_7 && (data & 0xff) < 3)
-		m72_set_sample_start(sample_data.xmultiplm72[data & 0xff]);
+	{
+		m72_state *state = space->machine->driver_data<m72_state>();
+		m72_set_sample_start(state->m72audio, sample_data.xmultiplm72[data & 0xff]);
+	}
 }
 
 static WRITE16_HANDLER( dbreedm72_sample_trigger_w )
 {
 	if (ACCESSING_BITS_0_7 && (data & 0xff) < 9)
-		m72_set_sample_start(sample_data.dbreedm72[data & 0xff]);
+	{
+		m72_state *state = space->machine->driver_data<m72_state>();
+		m72_set_sample_start(state->m72audio, sample_data.dbreedm72[data & 0xff]);
+	}
 }
 
 static WRITE16_HANDLER( airduelm72_sample_trigger_w )
 {
 	if (ACCESSING_BITS_0_7 && (data & 0xff) < 16)
-		m72_set_sample_start(sample_data.airduelm72[data & 0xff]);
+	{
+		m72_state *state = space->machine->driver_data<m72_state>();
+		m72_set_sample_start(state->m72audio, sample_data.airduelm72[data & 0xff]);
+	}
 }
 
 static WRITE16_HANDLER( dkgenm72_sample_trigger_w )
 {
 	if (ACCESSING_BITS_0_7 && (data & 0xff) < 28)
-		m72_set_sample_start(sample_data.dkgenm72[data & 0xff]);
+	{
+		m72_state *state = space->machine->driver_data<m72_state>();
+		m72_set_sample_start(state->m72audio, sample_data.dkgenm72[data & 0xff]);
+	}
 }
 
 static WRITE16_HANDLER( gallop_sample_trigger_w )
 {
 	if (ACCESSING_BITS_0_7 && (data & 0xff) < 31)
-		m72_set_sample_start(sample_data.gallop[data & 0xff]);
+	{
+		m72_state *state = space->machine->driver_data<m72_state>();
+		m72_set_sample_start(state->m72audio, sample_data.gallop[data & 0xff]);
+	}
 }
 
 
@@ -1012,7 +1038,7 @@ static ADDRESS_MAP_START( m72_portmap, ADDRESS_SPACE_IO, 16 )
 	AM_RANGE(0x00, 0x01) AM_READ_PORT("IN0")
 	AM_RANGE(0x02, 0x03) AM_READ_PORT("IN1")
 	AM_RANGE(0x04, 0x05) AM_READ_PORT("DSW")
-	AM_RANGE(0x00, 0x01) AM_WRITE(m72_sound_command_w)
+	AM_RANGE(0x00, 0x01) AM_DEVWRITE("m72", m72_sound_command_w)
 	AM_RANGE(0x02, 0x03) AM_WRITE(m72_port02_w)	/* coin counters, reset sound cpu, other stuff? */
 	AM_RANGE(0x04, 0x05) AM_WRITE(m72_dmaon_w)
 	AM_RANGE(0x06, 0x07) AM_WRITE(m72_irq_line_w)
@@ -1026,7 +1052,7 @@ static ADDRESS_MAP_START( rtype2_portmap, ADDRESS_SPACE_IO, 16 )
 	AM_RANGE(0x00, 0x01) AM_READ_PORT("IN0")
 	AM_RANGE(0x02, 0x03) AM_READ_PORT("IN1")
 	AM_RANGE(0x04, 0x05) AM_READ_PORT("DSW")
-	AM_RANGE(0x00, 0x01) AM_WRITE(m72_sound_command_w)
+	AM_RANGE(0x00, 0x01) AM_DEVWRITE("m72", m72_sound_command_w)
 	AM_RANGE(0x02, 0x03) AM_WRITE(rtype2_port02_w)
 	AM_RANGE(0x40, 0x43) AM_WRITENOP	/* Interrupt controller, only written to at bootup */
 	AM_RANGE(0x80, 0x81) AM_WRITE(m72_scrolly1_w)
@@ -1039,7 +1065,7 @@ static ADDRESS_MAP_START( poundfor_portmap, ADDRESS_SPACE_IO, 16 )
 	AM_RANGE(0x02, 0x03) AM_READ_PORT("IN1")
 	AM_RANGE(0x04, 0x05) AM_READ_PORT("DSW")
 	AM_RANGE(0x08, 0x0f) AM_READ(poundfor_trackball_r)
-	AM_RANGE(0x00, 0x01) AM_WRITE(m72_sound_command_w)
+	AM_RANGE(0x00, 0x01) AM_DEVWRITE("m72", m72_sound_command_w)
 	AM_RANGE(0x02, 0x03) AM_WRITE(rtype2_port02_w)
 	AM_RANGE(0x40, 0x43) AM_WRITENOP	/* Interrupt controller, only written to at bootup */
 	AM_RANGE(0x80, 0x81) AM_WRITE(m72_scrolly1_w)
@@ -1052,7 +1078,7 @@ static ADDRESS_MAP_START( majtitle_portmap, ADDRESS_SPACE_IO, 16 )
 	AM_RANGE(0x00, 0x01) AM_READ_PORT("IN0")
 	AM_RANGE(0x02, 0x03) AM_READ_PORT("IN1")
 	AM_RANGE(0x04, 0x05) AM_READ_PORT("DSW")
-	AM_RANGE(0x00, 0x01) AM_WRITE(m72_sound_command_w)
+	AM_RANGE(0x00, 0x01) AM_DEVWRITE("m72", m72_sound_command_w)
 	AM_RANGE(0x02, 0x03) AM_WRITE(rtype2_port02_w)
 	AM_RANGE(0x40, 0x43) AM_WRITENOP	/* Interrupt controller, only written to at bootup */
 	AM_RANGE(0x80, 0x81) AM_WRITE(m72_scrolly1_w)
@@ -1066,7 +1092,7 @@ static ADDRESS_MAP_START( hharry_portmap, ADDRESS_SPACE_IO, 16 )
 	AM_RANGE(0x00, 0x01) AM_READ_PORT("IN0")
 	AM_RANGE(0x02, 0x03) AM_READ_PORT("IN1")
 	AM_RANGE(0x04, 0x05) AM_READ_PORT("DSW")
-	AM_RANGE(0x00, 0x01) AM_WRITE(m72_sound_command_w)
+	AM_RANGE(0x00, 0x01) AM_DEVWRITE("m72", m72_sound_command_w)
 	AM_RANGE(0x02, 0x03) AM_WRITE(rtype2_port02_w)	/* coin counters, reset sound cpu, other stuff? */
 	AM_RANGE(0x04, 0x05) AM_WRITE(m72_dmaon_w)
 	AM_RANGE(0x06, 0x07) AM_WRITE(m72_irq_line_w)
@@ -1081,7 +1107,7 @@ static ADDRESS_MAP_START( kengo_portmap, ADDRESS_SPACE_IO, 16 )
 	AM_RANGE(0x00, 0x01) AM_READ_PORT("IN0")
 	AM_RANGE(0x02, 0x03) AM_READ_PORT("IN1")
 	AM_RANGE(0x04, 0x05) AM_READ_PORT("DSW")
-	AM_RANGE(0x00, 0x01) AM_WRITE(m72_sound_command_w)
+	AM_RANGE(0x00, 0x01) AM_DEVWRITE("m72", m72_sound_command_w)
 	AM_RANGE(0x02, 0x03) AM_WRITE(rtype2_port02_w)
 	AM_RANGE(0x80, 0x81) AM_WRITE(m72_scrolly1_w)
 	AM_RANGE(0x82, 0x83) AM_WRITE(m72_scrollx1_w)
@@ -1103,35 +1129,35 @@ static ADDRESS_MAP_START( rtype_sound_portmap, ADDRESS_SPACE_IO, 8 )
 	ADDRESS_MAP_GLOBAL_MASK(0xff)
 	AM_RANGE(0x00, 0x01) AM_DEVREADWRITE("ymsnd", ym2151_r, ym2151_w)
 	AM_RANGE(0x02, 0x02) AM_READ(soundlatch_r)
-	AM_RANGE(0x06, 0x06) AM_WRITE(m72_sound_irq_ack_w)
-	AM_RANGE(0x84, 0x84) AM_READ(m72_sample_r)
+	AM_RANGE(0x06, 0x06) AM_DEVWRITE("m72", m72_sound_irq_ack_w)
+	AM_RANGE(0x84, 0x84) AM_DEVREAD("m72", m72_sample_r)
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( sound_portmap, ADDRESS_SPACE_IO, 8 )
 	ADDRESS_MAP_GLOBAL_MASK(0xff)
 	AM_RANGE(0x00, 0x01) AM_DEVREADWRITE("ymsnd", ym2151_r, ym2151_w)
 	AM_RANGE(0x02, 0x02) AM_READ(soundlatch_r)
-	AM_RANGE(0x06, 0x06) AM_WRITE(m72_sound_irq_ack_w)
-	AM_RANGE(0x82, 0x82) AM_DEVWRITE("dac", m72_sample_w)
-	AM_RANGE(0x84, 0x84) AM_READ(m72_sample_r)
+	AM_RANGE(0x06, 0x06) AM_DEVWRITE("m72", m72_sound_irq_ack_w)
+	AM_RANGE(0x82, 0x82) AM_DEVWRITE("m72", m72_sample_w)
+	AM_RANGE(0x84, 0x84) AM_DEVREAD("m72", m72_sample_r)
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( rtype2_sound_portmap, ADDRESS_SPACE_IO, 8 )
 	ADDRESS_MAP_GLOBAL_MASK(0xff)
 	AM_RANGE(0x00, 0x01) AM_DEVREADWRITE("ymsnd", ym2151_r, ym2151_w)
 	AM_RANGE(0x80, 0x80) AM_READ(soundlatch_r)
-	AM_RANGE(0x80, 0x81) AM_WRITE(rtype2_sample_addr_w)
-	AM_RANGE(0x82, 0x82) AM_DEVWRITE("dac", m72_sample_w)
-	AM_RANGE(0x83, 0x83) AM_WRITE(m72_sound_irq_ack_w)
-	AM_RANGE(0x84, 0x84) AM_READ(m72_sample_r)
+	AM_RANGE(0x80, 0x81) AM_DEVWRITE("m72", rtype2_sample_addr_w)
+	AM_RANGE(0x82, 0x82) AM_DEVWRITE("m72", m72_sample_w)
+	AM_RANGE(0x83, 0x83) AM_DEVWRITE("m72", m72_sound_irq_ack_w)
+	AM_RANGE(0x84, 0x84) AM_DEVREAD("m72", m72_sample_r)
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( poundfor_sound_portmap, ADDRESS_SPACE_IO, 8 )
 	ADDRESS_MAP_GLOBAL_MASK(0xff)
-	AM_RANGE(0x10, 0x13) AM_WRITE(poundfor_sample_addr_w)
+	AM_RANGE(0x10, 0x13) AM_DEVWRITE("m72", poundfor_sample_addr_w)
 	AM_RANGE(0x40, 0x41) AM_DEVREADWRITE("ymsnd", ym2151_r, ym2151_w)
 	AM_RANGE(0x42, 0x42) AM_READ(soundlatch_r)
-	AM_RANGE(0x42, 0x42) AM_WRITE(m72_sound_irq_ack_w)
+	AM_RANGE(0x42, 0x42) AM_DEVWRITE("m72", m72_sound_irq_ack_w)
 ADDRESS_MAP_END
 
 static ADDRESS_MAP_START( mcu_io_map, ADDRESS_SPACE_IO, 8 )
@@ -1140,8 +1166,7 @@ static ADDRESS_MAP_START( mcu_io_map, ADDRESS_SPACE_IO, 8 )
 	AM_RANGE(0x0001, 0x0001) AM_WRITE(m72_mcu_high_w)
 	AM_RANGE(0x0002, 0x0002) AM_READWRITE(m72_mcu_snd_r, m72_mcu_ack_w)
 	/* shared at b0000 - b0fff on the main cpu */
-	AM_RANGE(0xc000, 0xcfff) AM_READWRITE(m72_mcu_data_r,m72_mcu_data_w )
-
+	AM_RANGE(0xc000, 0xcfff) AM_READWRITE(m72_mcu_data_r, m72_mcu_data_w )
 	/* Ports */
 	AM_RANGE(MCS51_PORT_P0, MCS51_PORT_P3) AM_READWRITE(m72_mcu_port_r, m72_mcu_port_w)
 ADDRESS_MAP_END
@@ -1803,7 +1828,6 @@ static INPUT_PORTS_START( kengo )
 INPUT_PORTS_END
 
 
-#if 0
 static const gfx_layout tilelayout =
 {
 	8,8,			/* 8*8 characters */
@@ -1823,31 +1847,6 @@ static const gfx_layout spritelayout =
 	{ RGN_FRAC(3,4), RGN_FRAC(2,4), RGN_FRAC(1,4), RGN_FRAC(0,4) },
 	{ STEP8(0, 1), STEP8((16*8+0), 1) },
 	{ STEP16(0, 8) },
-	32*8			/* every sprite takes 32 consecutive bytes */
-};
-#endif
-
-static const gfx_layout tilelayout =
-{
-	8,8,			/* 8*8 characters */
-	RGN_FRAC(1,4),		/* NUM characters */
-	4,			/* 4 bits per pixel */
-	{ RGN_FRAC(3,4), RGN_FRAC(2,4), RGN_FRAC(1,4), RGN_FRAC(0,4) },
-	{ 0, 1, 2, 3, 4, 5, 6, 7 },
-	{ 0*8, 1*8, 2*8, 3*8, 4*8, 5*8, 6*8, 7*8 },
-	8*8			/* every char takes 8 consecutive bytes */
-};
-
-static const gfx_layout spritelayout =
-{
-	16,16,			/* 16*16 sprites */
-	RGN_FRAC(1,4),		/* NUM characters */
-	4,			/* 4 bits per pixel */
-	{ RGN_FRAC(3,4), RGN_FRAC(2,4), RGN_FRAC(1,4), RGN_FRAC(0,4) },
-	{ 0, 1, 2, 3, 4, 5, 6, 7,
-			16*8+0, 16*8+1, 16*8+2, 16*8+3, 16*8+4, 16*8+5, 16*8+6, 16*8+7 },
-	{ 0*8, 1*8, 2*8, 3*8, 4*8, 5*8, 6*8, 7*8,
-			8*8, 9*8, 10*8, 11*8, 12*8, 13*8, 14*8, 15*8 },
 	32*8			/* every sprite takes 32 consecutive bytes */
 };
 
@@ -1874,20 +1873,22 @@ static const ym2151_interface ym2151_config = { m72_ym2151_irq_handler };
 
 #define M72_AUDIOCHIPS					\
 	MDRV_SPEAKER_STANDARD_MONO("mono")			\
+	MDRV_SOUND_ADD("m72", M72, 0)				\
 	MDRV_SOUND_ADD("ymsnd", YM2151, SOUND_CLOCK)		\
 	MDRV_SOUND_CONFIG(ym2151_config)			\
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)		\
 
-#define M72_AUDIOCHIPS_WITH_DAC			\
-	M72_AUDIOCHIPS					\
-	MDRV_SOUND_ADD("dac", DAC, 0)			\
-	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.4)	\
+#define M72_AUDIOCHIPS_WITH_DAC				\
+	M72_AUDIOCHIPS						\
+	MDRV_SOUND_ADD("dac", DAC, 0)				\
+	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.4)		\
 
 #define M72_VIDEO_PARAMS						\
 	MDRV_PALETTE_LENGTH(0x200)						\
 	MDRV_SCREEN_ADD("screen", RASTER)					\
 	MDRV_SCREEN_RAW_PARAMS(MASTER_CLOCK/4, 512, 64, 448, 284, 0, 256)	\
 	MDRV_SCREEN_FORMAT(BITMAP_FORMAT_INDEXED16)				\
+
 
 static MACHINE_DRIVER_START( m72_base )
 	MDRV_DRIVER_DATA(m72_state)
@@ -1901,8 +1902,6 @@ static MACHINE_DRIVER_START( m72_base )
 	MDRV_CPU_IO_MAP(sound_portmap)
 	MDRV_MACHINE_START(m72)
 	MDRV_MACHINE_RESET(m72)
-	MDRV_SOUND_START(m72)
-	MDRV_SOUND_RESET(m72)
 
 	/* video hardware */
 	MDRV_GFXDECODE(m72)
@@ -1943,8 +1942,6 @@ static MACHINE_DRIVER_START( rtype )
 	/* IRQs are generated by main Z80 and YM2151 */
 	MDRV_MACHINE_START(m72)
 	MDRV_MACHINE_RESET(m72)
-	MDRV_SOUND_START(m72)
-	MDRV_SOUND_RESET(m72)
 
 	/* video hardware */
 	MDRV_GFXDECODE(m72)
@@ -1966,11 +1963,9 @@ static MACHINE_DRIVER_START( xmultipl )
 	MDRV_CPU_ADD("soundcpu", Z80, SOUND_CLOCK)
 	MDRV_CPU_PROGRAM_MAP(sound_rom_map)
 	MDRV_CPU_IO_MAP(rtype2_sound_portmap)
-	MDRV_CPU_PERIODIC_INT(nmi_line_pulse, 128*55)/* clocked by V1? (Vigilante) */	/* IRQs are generated by main Z80 and YM2151 */
+	MDRV_CPU_PERIODIC_INT(nmi_line_pulse, 128*55)
 	MDRV_MACHINE_START(m72)
 	MDRV_MACHINE_RESET(xmultipl)
-	MDRV_SOUND_START(m72)
-	MDRV_SOUND_RESET(m72)
 
 	/* video hardware */
 	MDRV_GFXDECODE(m72)
@@ -1991,11 +1986,9 @@ static MACHINE_DRIVER_START( xmultiplm72 )
 	MDRV_CPU_ADD("soundcpu", Z80, SOUND_CLOCK)
 	MDRV_CPU_PROGRAM_MAP(sound_ram_map)
 	MDRV_CPU_IO_MAP(sound_portmap)
-	MDRV_CPU_PERIODIC_INT(nmi_line_pulse, 128*55)	/* clocked by V1? (Vigilante) */	/* IRQs are generated by main Z80 and YM2151 */
+	MDRV_CPU_PERIODIC_INT(nmi_line_pulse, 128*55)
 	MDRV_MACHINE_START(m72)
 	MDRV_MACHINE_RESET(xmultipl)
-	MDRV_SOUND_START(m72)
-	MDRV_SOUND_RESET(m72)
 
 	/* video hardware */
 	MDRV_GFXDECODE(m72)
@@ -2017,11 +2010,9 @@ static MACHINE_DRIVER_START( dbreed )
 	MDRV_CPU_ADD("soundcpu", Z80, SOUND_CLOCK)
 	MDRV_CPU_PROGRAM_MAP(sound_rom_map)
 	MDRV_CPU_IO_MAP(rtype2_sound_portmap)
-	MDRV_CPU_PERIODIC_INT(nmi_line_pulse, 128*55)	/* clocked by V1? (Vigilante) */	/* IRQs are generated by main Z80 and YM2151 */
+	MDRV_CPU_PERIODIC_INT(nmi_line_pulse, 128*55)
 	MDRV_MACHINE_START(m72)
 	MDRV_MACHINE_RESET(xmultipl)
-	MDRV_SOUND_START(m72)
-	MDRV_SOUND_RESET(m72)
 
 	/* video hardware */
 	MDRV_GFXDECODE(rtype2)
@@ -2043,11 +2034,9 @@ static MACHINE_DRIVER_START( dbreedm72 )
 	MDRV_CPU_ADD("soundcpu", Z80, SOUND_CLOCK)
 	MDRV_CPU_PROGRAM_MAP(sound_ram_map)
 	MDRV_CPU_IO_MAP(sound_portmap)
-	MDRV_CPU_PERIODIC_INT(nmi_line_pulse, 128*55)	/* clocked by V1? (Vigilante) */	/* IRQs are generated by main Z80 and YM2151 */
+	MDRV_CPU_PERIODIC_INT(nmi_line_pulse, 128*55)
 	MDRV_MACHINE_START(m72)
 	MDRV_MACHINE_RESET(xmultipl)
-	MDRV_SOUND_START(m72)
-	MDRV_SOUND_RESET(m72)
 
 	/* video hardware */
 	MDRV_GFXDECODE(m72)
@@ -2069,11 +2058,9 @@ static MACHINE_DRIVER_START( rtype2 )
 	MDRV_CPU_ADD("soundcpu", Z80, SOUND_CLOCK)
 	MDRV_CPU_PROGRAM_MAP(sound_rom_map)
 	MDRV_CPU_IO_MAP(rtype2_sound_portmap)
-	MDRV_CPU_PERIODIC_INT(nmi_line_pulse, 128*55)	/* clocked by V1? (Vigilante) */	/* IRQs are generated by main Z80 and YM2151 */
+	MDRV_CPU_PERIODIC_INT(nmi_line_pulse, 128*55)
 	MDRV_MACHINE_START(m72)
 	MDRV_MACHINE_RESET(m72)
-	MDRV_SOUND_START(m72)
-	MDRV_SOUND_RESET(m72)
 
 	/* video hardware */
 	MDRV_GFXDECODE(rtype2)
@@ -2095,11 +2082,9 @@ static MACHINE_DRIVER_START( majtitle )
 	MDRV_CPU_ADD("soundcpu", Z80, SOUND_CLOCK)
 	MDRV_CPU_PROGRAM_MAP(sound_rom_map)
 	MDRV_CPU_IO_MAP(rtype2_sound_portmap)
-	MDRV_CPU_PERIODIC_INT(nmi_line_pulse, 128*55)	/* clocked by V1? (Vigilante) */	/* IRQs are generated by main Z80 and YM2151 */
+	MDRV_CPU_PERIODIC_INT(nmi_line_pulse, 128*55)
 	MDRV_MACHINE_START(m72)
 	MDRV_MACHINE_RESET(m72)
-	MDRV_SOUND_START(m72)
-	MDRV_SOUND_RESET(m72)
 
 	/* video hardware */
 	MDRV_GFXDECODE(majtitle)
@@ -2121,11 +2106,9 @@ static MACHINE_DRIVER_START( hharry )
 	MDRV_CPU_ADD("soundcpu", Z80, SOUND_CLOCK)
 	MDRV_CPU_PROGRAM_MAP(sound_rom_map)
 	MDRV_CPU_IO_MAP(rtype2_sound_portmap)
-	MDRV_CPU_PERIODIC_INT(nmi_line_pulse, 128*55)	/* clocked by V1? (Vigilante) */	/* IRQs are generated by main Z80 and YM2151 */
+	MDRV_CPU_PERIODIC_INT(nmi_line_pulse, 128*55)
 	MDRV_MACHINE_START(m72)
 	MDRV_MACHINE_RESET(xmultipl)
-	MDRV_SOUND_START(m72)
-	MDRV_SOUND_RESET(m72)
 
 	/* video hardware */
 	MDRV_GFXDECODE(rtype2)
@@ -2147,11 +2130,9 @@ static MACHINE_DRIVER_START( hharryu )
 	MDRV_CPU_ADD("soundcpu", Z80, SOUND_CLOCK)
 	MDRV_CPU_PROGRAM_MAP(sound_rom_map)
 	MDRV_CPU_IO_MAP(rtype2_sound_portmap)
-	MDRV_CPU_PERIODIC_INT(nmi_line_pulse, 128*55)	/* clocked by V1? (Vigilante) */	/* IRQs are generated by main Z80 and YM2151 */
+	MDRV_CPU_PERIODIC_INT(nmi_line_pulse, 128*55)
 	MDRV_MACHINE_START(m72)
 	MDRV_MACHINE_RESET(xmultipl)
-	MDRV_SOUND_START(m72)
-	MDRV_SOUND_RESET(m72)
 
 	/* video hardware */
 	MDRV_GFXDECODE(rtype2)
@@ -2176,8 +2157,6 @@ static MACHINE_DRIVER_START( airduelm82 )
 	MDRV_CPU_PERIODIC_INT(nmi_line_pulse, 128*55)
 	MDRV_MACHINE_START(m72)
 	MDRV_MACHINE_RESET(m72)
-	MDRV_SOUND_START(m72)
-	MDRV_SOUND_RESET(m72)
 
 	/* video hardware */
 	MDRV_GFXDECODE(rtype2)
@@ -2199,11 +2178,9 @@ static MACHINE_DRIVER_START( dkgenm72 )
 	MDRV_CPU_ADD("soundcpu", Z80, SOUND_CLOCK)
 	MDRV_CPU_PROGRAM_MAP(sound_ram_map)
 	MDRV_CPU_IO_MAP(sound_portmap)
-	MDRV_CPU_PERIODIC_INT(fake_nmi, 128*55)	/* clocked by V1? (Vigilante) */	/* IRQs are generated by main Z80 and YM2151 */
+	MDRV_CPU_PERIODIC_INT(fake_nmi, 128*55)
 	MDRV_MACHINE_START(m72)
 	MDRV_MACHINE_RESET(xmultipl)
-	MDRV_SOUND_START(m72)
-	MDRV_SOUND_RESET(m72)
 
 	/* video hardware */
 	MDRV_GFXDECODE(m72)
@@ -2225,11 +2202,9 @@ static MACHINE_DRIVER_START( poundfor )
 	MDRV_CPU_ADD("soundcpu", Z80, SOUND_CLOCK)
 	MDRV_CPU_PROGRAM_MAP(sound_rom_map)
 	MDRV_CPU_IO_MAP(poundfor_sound_portmap)
-	MDRV_CPU_PERIODIC_INT(fake_nmi, 128*55)	// clocked by V1? (Vigilante)	// IRQs are generated by main Z80 and YM2151
+	MDRV_CPU_PERIODIC_INT(fake_nmi, 128*55)
 	MDRV_MACHINE_START(m72)
 	MDRV_MACHINE_RESET(m72)
-	MDRV_SOUND_START(m72)
-	MDRV_SOUND_RESET(m72)
 
 	// video hardware
 	MDRV_GFXDECODE(rtype2)
@@ -2251,11 +2226,9 @@ static MACHINE_DRIVER_START( cosmccop )
 	MDRV_CPU_ADD("soundcpu", Z80, SOUND_CLOCK)
 	MDRV_CPU_PROGRAM_MAP(sound_rom_map)
 	MDRV_CPU_IO_MAP(rtype2_sound_portmap)
-	MDRV_CPU_PERIODIC_INT(nmi_line_pulse, 128*55)	/* clocked by V1? (Vigilante) */	/* IRQs are generated by main Z80 and YM2151 */
+	MDRV_CPU_PERIODIC_INT(nmi_line_pulse, 128*55)
 	MDRV_MACHINE_START(m72)
 	MDRV_MACHINE_RESET(kengo)
-	MDRV_SOUND_START(m72)
-	MDRV_SOUND_RESET(m72)
 
 	/* video hardware */
 	MDRV_GFXDECODE(rtype2)
