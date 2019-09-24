@@ -7,13 +7,12 @@
 #define MCU_CLOCK		(MASTER_CLOCK / 4)
 #define PIXEL_CLOCK		(MASTER_CLOCK / 2)
 
-class xain_state : public driver_data_t
+
+class xain_state : public driver_device
 {
 public:
-	static driver_data_t *alloc(running_machine &machine) { return auto_alloc_clear(&machine, xain_state(machine)); }
-
-	xain_state(running_machine &machine)
-			: driver_data_t(machine) { }
+	xain_state(running_machine &machine, const driver_device_config_base &config)
+		: driver_device(machine, config) { }
 
 	/* pointers */
 	UINT8		*xain_charram;

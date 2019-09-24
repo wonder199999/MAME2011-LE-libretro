@@ -172,12 +172,12 @@ void device_scheduler::timeslice()
 						// via the call to cpu_execute
 						exec->m_cycles_stolen = 0;
 						m_executing_device = exec;
-						*exec->m_icount = exec->m_cycles_running;
+						*exec->m_icountptr = exec->m_cycles_running;
 						exec->execute_run();
 
 						// adjust for any cycles we took back
-						assert(ran >= *exec->m_icount);
-						ran -= *exec->m_icount;
+						assert(ran >= *exec->m_icountptr);
+						ran -= *exec->m_icountptr;
 						assert(ran >= exec->m_cycles_stolen);
 						ran -= exec->m_cycles_stolen;
 					}

@@ -17,22 +17,12 @@
 /* fake a keyboard mapped to retro joypad */
 enum
 {
-	KEY_F11,
-	KEY_TAB,
-	KEY_F3,
-	KEY_F2,
+	KEY_F11, KEY_TAB, KEY_F3, KEY_F2,
 	KEY_START,
 	KEY_COIN,
-	KEY_BUTTON_1,
-	KEY_BUTTON_2,
-	KEY_BUTTON_3,
-	KEY_BUTTON_4,
-	KEY_BUTTON_5,
-	KEY_BUTTON_6,
-	KEY_JOYSTICK_U,
-	KEY_JOYSTICK_D,
-	KEY_JOYSTICK_L,
-	KEY_JOYSTICK_R,
+	KEY_BUTTON_1, KEY_BUTTON_2, KEY_BUTTON_3,
+	KEY_BUTTON_4, KEY_BUTTON_5, KEY_BUTTON_6,
+	KEY_JOYSTICK_U, KEY_JOYSTICK_D, KEY_JOYSTICK_L, KEY_JOYSTICK_R,
 	KEY_TOTAL
 };
 
@@ -161,7 +151,7 @@ struct _neogeo_bioses
 	const char bios[24];
 };
 
-static const struct _neogeo_bioses	neogeo_bioses[] = {
+static const _neogeo_bioses neogeo_bioses[] = {
 	{ "euro",	  "Europe MVS(Ver. 2)",		"sp-s2.sp1" },
 	{ "euro-s1",	  "Europe MVS(Ver. 1)",		"sp-s.sp1" },
 	{ "us",		  "USA MVS(Ver. 2?)",		"sp-u2.sp1" },
@@ -196,12 +186,6 @@ bool verify_rom_hash = false;
 bool allow_select_newgame = false;
 bool RETRO_LOOP = true;
 
-#ifdef _WIN32
-	static char slash = '\\';
-#else
-	static char slash = '/';
-#endif
-
 // input device
 static input_device *joypad1_device = NULL;	// P1 JOYPAD
 static input_device *joypad2_device = NULL;	// P2 JOYPAD
@@ -209,10 +193,10 @@ static input_device *joypad3_device = NULL; 	// P3 JOYPAD
 static input_device *joypad4_device = NULL; 	// P4 JOYPAD
 static input_device *keyboard_device = NULL;	// Keyboard
 
-// rendering target
+// a single rendering target
 static render_target *our_target = NULL;
 
-// state
+// the state of each key or button
 static UINT8 pad_state[4][KEY_TOTAL];
 static UINT8 retrokbd_state[2][RETROK_LAST];
 
@@ -227,21 +211,23 @@ static bool retro_load_ok = false;
 static bool keyboard_input = true;
 static bool macro_enable = true;
 static bool is_neogeo = false;
-static bool do_cheat = true;	// TODO: add core option
+static bool do_cheat = true;
+static bool mame_stop = false;
+static bool mame_reset = false;
+static bool FirstTimeUpdate;
+static bool tate;
 
-static INT32 rtwi = 320, rthe = 240, topw = 320;	/* DEFAULT TEXW/TEXH/PITCH */
+static INT32 retro_width = 320;		// Default texwidth
+static INT32 retro_height = 240;	// Default texheight
+static INT32 retro_topwidth = 320;	// Default pitch
 static INT32 ui_ipt_pushchar = -1;
 static INT32 set_frame_skip;
 static INT32 vertical;
 static INT32 orient;
 static INT32 set_neogeo_bios;
 static UINT8 turbo_enable, turbo_delay;
-static UINT32 tate;
-static UINT32 screenRot = 0;
-static UINT32 pauseg = 0;
-static UINT32 mame_reset = 0;
-static UINT32 FirstTimeUpdate = 1;
 static UINT32 macro_state;
+static UINT32 screenRot = 0;
 static UINT32 sample_rate = 48000;
 static UINT32 adjust_opt[7] = { 0/*Enable/Disable*/, 0/*Limit*/, 0/*GetRefreshRate*/, 0/*Brightness*/, 0/*Contrast*/, 0/*Gamma*/, 0/*Overclock*/ };
 static float arroffset[4] = { 0/*For brightness*/, 0/*For contrast*/, 0/*For gamma*/, 1.0/*For overclock*/ };
@@ -254,18 +240,19 @@ static double refresh_rate = 60.0;
 
 extern void retro_finish(void);
 extern void retro_main_loop(void);
-void osd_init( running_machine *machine );
-void osd_update( running_machine *machine, int skip_redraw );
-void osd_update_audio_stream( running_machine *machine, short *buffer, int samples_this_frame );
-void osd_set_mastervolume( int attenuation );
-void osd_customize_input_type_list( input_type_desc *typelist );
-void osd_exit( running_machine &machine );
+
+void osd_init(running_machine *machine);
+void osd_update(running_machine *machine, int skip_redraw);
+void osd_update_audio_stream(running_machine *machine, short *buffer, int samples_this_frame);
+void osd_set_mastervolume(int attenuation);
+void osd_customize_input_type_list(input_type_desc *typelist);
+void osd_exit(running_machine &machine);
 
 static void update_geometry(void);
+static void retro_poll_mame_input(void);
 static int mmain(int argc, const char *argv);
 static int executeGame(char *path);
 static int iptdev_get_state(void *device_internal, void *item_internal);
-static void retro_poll_mame_input(void);
 
 /**************************************************************************/
 //	MACROS
@@ -315,11 +302,11 @@ static void retro_poll_mame_input(void);
 #endif
 
 #ifdef M16B
-	UINT16 videoBuffer[512 * 512];
-	#define PITCH 1
+	UINT16 videoBuffer[512*512];
+	#define PITCH	(1)
 #else
-	UINT32 videoBuffer[1024 * 1024];
-	#define PITCH 1 * 2
+	UINT32 videoBuffer[1024*1024];
+	#define PITCH	(1*2)
 #endif
 
 #include "rendersw.c"
@@ -459,12 +446,12 @@ static void check_variables(void)
 	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
 	{
 		if (!strcmp(var.value, "enabled"))
-			tate = 1;
+			tate = true;
 		else
-			tate = 0;
+			tate = false;
 	}
 	else
-		tate = 0;
+		tate = false;
 
 	var.key = "mba_mini_kb_input";
 	var.value = NULL;
@@ -678,8 +665,8 @@ void retro_get_system_info(struct retro_system_info *info)
 
 void retro_get_system_av_info(struct retro_system_av_info *info)
 {
-	int width =  (tate && vertical) ? rthe : rtwi;
-	int height = (tate && vertical) ? rtwi : rthe;
+	int width =  (tate && vertical) ? retro_height : retro_width;
+	int height = (tate && vertical) ? retro_width : retro_height;
 
 	info->geometry.base_width   = width;
 	info->geometry.base_height  = height;
@@ -697,8 +684,8 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
 	int common_factor = 1;
 	if (set_par)
 	{
-		int temp_width = rtwi;
-		int temp_height = rthe;
+		int temp_width = retro_width;
+		int temp_height = retro_height;
 		while (temp_width != temp_height)
 		{
 			if (temp_width > temp_height)
@@ -713,24 +700,11 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
 #endif
 }
 
-void retro_init (void) { }
-
-void retro_deinit(void)
-{
-	if (retro_load_ok)
-		retro_finish();
-
-	LOGI("M.B.A_more DeInit completed.\n");
-}
-
-void retro_reset (void)
-{
-	mame_reset = 1;
-}
 
 #if defined(HAVE_OPENGL) || defined(HAVE_OPENGLES)
 	#include "retroogl.c"
 #endif
+
 
 void retro_run (void)
 {
@@ -747,9 +721,9 @@ void retro_run (void)
 	do_gl2d();
 #else
 	if (draw_this_frame)
-		video_cb(videoBuffer, rtwi, rthe, topw << PITCH);
+		video_cb(videoBuffer, retro_width, retro_height, retro_topwidth << PITCH);
 	else
-		video_cb(	NULL, rtwi, rthe, topw << PITCH);
+		video_cb(	NULL, retro_width, retro_height, retro_topwidth << PITCH);
 #endif
 }
 
@@ -773,9 +747,9 @@ bool retro_load_game(const struct retro_game_info *info)
 		exit(0);
    	}
 #ifdef M16B
-	memset(videoBuffer, 0, 512 * 512 * 2);
+	memset(videoBuffer, 0, 512*512*2);
 #else
-	memset(videoBuffer, 0, 1024 * 1024 * 2 * 2);
+	memset(videoBuffer, 0, 1024*1024*4);
 #endif
 	check_variables();
 
@@ -824,12 +798,29 @@ bool retro_load_game(const struct retro_game_info *info)
 	return 1;
 }
 
+void retro_init (void)
+{
+}
+
+void retro_reset (void)
+{
+	mame_reset = true;
+}
+
 void retro_unload_game(void)
 {
-	if (!pauseg)
-		pauseg = 1;
+	if (!mame_stop)
+		mame_stop = true;
 
 	LOGI("M.B.A_more has unload the game.\n");
+}
+
+void retro_deinit(void)
+{
+	if (retro_load_ok)
+		retro_finish();
+
+	LOGI("M.B.A_more DeInit completed.\n");
 }
 
 
@@ -837,6 +828,7 @@ void retro_unload_game(void)
 
 static int iptdev_get_state(void *device_internal, void *item_internal)
 {
+	// this function is called by the input system to get the current key state
 	UINT8 *itemdata = (UINT8 *)item_internal;
 	return *itemdata;
 }
@@ -845,6 +837,7 @@ static void initInput( running_machine *machine )
 {
 	UINT32 i;
 
+	// initialize the input system by adding devices
 	keyboard_device = input_device_add(machine, DEVICE_CLASS_KEYBOARD, "Retrokdb", NULL);
 	if (keyboard_device == NULL)
 		fatalerror("KBD Error creating keyboard device! \n");
@@ -1025,7 +1018,7 @@ static void initInput( running_machine *machine )
 FINISHED: ;
 }
 
-static inline void retro_poll_mame_input( void )
+INLINE void retro_poll_mame_input(void)
 {
 	input_poll_cb();
 
@@ -1161,8 +1154,7 @@ void osd_exit(running_machine &machine)
 {
 	LOGI("osd_exit called \n");
 
-	if (our_target != NULL)
-		render_target_free(our_target);
+	machine.render().target_free(our_target);
 
 	our_target = NULL;
 
@@ -1177,7 +1169,8 @@ void osd_init(running_machine *machine)
 {
 	machine->add_notifier(MACHINE_NOTIFY_EXIT, osd_exit);
 
-	our_target = render_target_alloc(machine, NULL, 0);
+	// initialize the video system by allocating a rendering target
+	our_target = machine->render().target_alloc(NULL, 0);
 
 	fprintf(stderr, "SOURCE FILE: %s\n", machine->gamedrv->source_file);
 	fprintf(stderr, "PARENT: %s\n", machine->gamedrv->parent);
@@ -1208,16 +1201,13 @@ void osd_init(running_machine *machine)
 
 void osd_update(running_machine *machine, int skip_redraw)
 {
-	const render_primitive_list	*primlist;
-	UINT8				*surfptr;
-
 	if (mame_reset)
 	{
-		mame_reset = 0;
+		mame_reset = false;
 		machine->schedule_soft_reset();
 	}
 
-	if (pauseg)
+	if (mame_stop)
 	{
 		machine->schedule_exit();
 		return;
@@ -1229,18 +1219,19 @@ void osd_update(running_machine *machine, int skip_redraw)
 	if (skip_redraw == 0)
 	{
 		draw_this_frame = true;
-		INT32 minwidth, minheight;
-
-		/* get the minimum width/height for the current layout */
-		render_target_get_minimum_size(our_target, &minwidth, &minheight);
 
 		if (FirstTimeUpdate)
 		{
-			FirstTimeUpdate = 0;
-			LOGI("Game screen: width=%i, height=%i, rowPixels=%i\n", minwidth, minheight, minwidth);
+			FirstTimeUpdate = false;
+			INT32 minwidth, minheight;
 
-			rtwi = topw = minwidth;
-			rthe = minheight;
+			/* get the minimum width/height for the current layout */
+			our_target->compute_minimum_size(minwidth, minheight);
+
+			retro_width = retro_topwidth = minwidth;
+			retro_height = minheight;
+
+			LOGI("Game screen: width=%i, height=%i, rowPixels=%i\n", minwidth, minheight, minwidth);
 		}
 
 		if (adjust_opt[0])
@@ -1259,27 +1250,27 @@ void osd_update(running_machine *machine, int skip_redraw)
 				if ((adjust_opt[3] || adjust_opt[4] || adjust_opt[5]))
 				{
 					screen_device *screen = screen_first(*machine);
-					render_container *container = render_container_get_screen(screen);
-					render_container_user_settings settings;
-					render_container_get_user_settings(container, &settings);
+					render_container::user_settings settings;
+					screen->container().get_user_settings(settings);
 
 					if (adjust_opt[3])
 					{
 						adjust_opt[3] = 0;
-						settings.brightness = arroffset[0] + 1.0f;
-						render_container_set_user_settings(container, &settings);
+						settings.m_brightness = arroffset[0] + 1.0f;
+						screen->container().set_user_settings(settings);
+
 					}
 					if (adjust_opt[4])
 					{
 						adjust_opt[4] = 0;
-						settings.contrast = arroffset[1] + 1.0f;
-						render_container_set_user_settings(container, &settings);
+						settings.m_contrast = arroffset[1] + 1.0f;
+						screen->container().set_user_settings(settings);
 					}
 					if (adjust_opt[5])
 					{
 						adjust_opt[5] = 0;
-						settings.gamma = arroffset[2] + 1.0f;
-						render_container_set_user_settings(container, &settings);
+						settings.m_gamma = arroffset[2] + 1.0f;
+						screen->container().set_user_settings(settings);
 					}
 				}
 
@@ -1299,22 +1290,24 @@ void osd_update(running_machine *machine, int skip_redraw)
 				}
 			}
 		}
+
+		UINT8 *surfptr = (UINT8 *)videoBuffer;
+
 		/* make that the size of our target */
-		render_target_set_bounds(our_target, rtwi, rthe, 0);
+		our_target->set_bounds(retro_width, retro_height);
 
 		/* get the list of primitives for the target at the current size */
-		primlist = render_target_get_primitives(our_target);
+		render_primitive_list &primlist = our_target->get_primitives();
 
 		/* lock them, and then render them */
-		osd_lock_acquire(primlist->lock);
-
-		surfptr = (UINT8 *)videoBuffer;
+		primlist.acquire_lock();
 #ifdef M16B
-		rgb565_draw_primitives(primlist->head, surfptr, rtwi, rthe, rtwi);
+		rgb565_draw_primitives(primlist, surfptr, retro_width, retro_height, retro_width);
 #else
-		rgb888_draw_primitives(primlist->head, surfptr, rtwi, rthe, rtwi);
+		rgb888_draw_primitives(primlist, surfptr, retro_width, retro_height, retro_width);
 #endif
-		osd_lock_release(primlist->lock);
+		/* do the drawing here */
+		primlist.release_lock();
 	}
 	else
 		draw_this_frame = false;
@@ -1345,7 +1338,7 @@ void osd_wait_for_debugger(running_device *device, int firststop)
 //============================================================
 void osd_update_audio_stream(running_machine *machine, short *buffer, int samples_this_frame)
 {
-	if (!pauseg)
+	if (!mame_stop)
 		audio_batch_cb(buffer, samples_this_frame);
 }
 
@@ -1380,6 +1373,11 @@ static int parsePath(char *path, char *gamePath, char *gameName)
 	int slashIndex = -1;
 	int dotIndex = -1;
 	int len = strlen(path);
+#ifdef _WIN32
+	char slash = '\\';
+#else
+	char slash = '/';
+#endif
 
 	if (len < 1)
 		return 0;
@@ -1456,7 +1454,7 @@ static int executeGame(char *path)
 		NULL, NULL, NULL, NULL
 	};
 
-	FirstTimeUpdate = 1;
+	FirstTimeUpdate = true;
 
 	// split the path to directory and the name without the zip extension
 	result = parsePath(path, MAME_GAME_PATH, MAME_GAME_NAME);

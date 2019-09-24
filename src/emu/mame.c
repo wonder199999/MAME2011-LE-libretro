@@ -192,8 +192,8 @@ int mame_execute(core_options *options)
 			mame_parse_ini_files(options, driver);
 		}
 
-		retro_global_config = global_alloc(machine_config(driver->machine_config));
-		retro_global_machine = global_alloc(running_machine(*driver, *retro_global_config, *options, started_empty));
+		retro_global_config = global_alloc(machine_config(*driver));
+		retro_global_machine = global_alloc(running_machine(*retro_global_config, *options, started_empty));
 		global_machine = retro_global_machine;
 
 		error = retro_global_machine->run(firstrun);
@@ -259,6 +259,15 @@ core_options *mame_options(void)
 	return mame_opts;
 }
 
+/*-------------------------------------------------
+    set_mame_options - set mame options, used by
+	validate option
+-------------------------------------------------*/
+
+void set_mame_options(core_options *options)
+{
+	mame_opts = options;
+}
 
 /***************************************************************************
     OUTPUT MANAGEMENT
@@ -531,7 +540,6 @@ void mame_parse_ini_files(core_options *options, const game_driver *driver)
 #ifndef MESS
 		const game_driver *parent = driver_get_clone(driver);
 		const game_driver *gparent = (parent != NULL) ? driver_get_clone(parent) : NULL;
-		machine_config *config;
 
 		/* parse "vertical.ini" or "horizont.ini" */
 		if (driver->flags & ORIENTATION_SWAP_XY)
@@ -540,14 +548,15 @@ void mame_parse_ini_files(core_options *options, const game_driver *driver)
 			parse_ini_file(options, "horizont", OPTION_PRIORITY_ORIENTATION_INI);
 
 		/* parse "vector.ini" for vector games */
-		config = global_alloc(machine_config(driver->machine_config));
-		for (const screen_device_config *devconfig = screen_first(*config); devconfig != NULL; devconfig = screen_next(devconfig))
-			if (devconfig->screen_type() == SCREEN_TYPE_VECTOR)
-			{
-				parse_ini_file(options, "vector", OPTION_PRIORITY_VECTOR_INI);
-				break;
-			}
-		global_free(config);
+		{
+			machine_config config(*driver);
+			for (const screen_device_config *devconfig = screen_first(config); devconfig != NULL; devconfig = screen_next(devconfig))
+				if (devconfig->screen_type() == SCREEN_TYPE_VECTOR)
+				{
+					parse_ini_file(options, "vector", OPTION_PRIORITY_VECTOR_INI);
+					break;
+				}
+		}
 
 		/* next parse "source/<sourcefile>.ini"; if that doesn't exist, try <sourcefile>.ini */
 		astring sourcename;

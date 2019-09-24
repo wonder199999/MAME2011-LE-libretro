@@ -631,9 +631,7 @@ static MACHINE_START( xsleena )
 	}
 }
 
-static MACHINE_DRIVER_START( xsleena )
-	MDRV_DRIVER_DATA(xain_state)
-
+static MACHINE_CONFIG_START( xsleena, xain_state )
 	/* basic machine hardware */
 	MDRV_CPU_ADD("maincpu", M6809, CPU_CLOCK)
 	MDRV_CPU_PROGRAM_MAP(main_map)
@@ -680,12 +678,11 @@ static MACHINE_DRIVER_START( xsleena )
 	MDRV_SOUND_ROUTE(1, "mono", 0.50)
 	MDRV_SOUND_ROUTE(2, "mono", 0.50)
 	MDRV_SOUND_ROUTE(3, "mono", 0.40)
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
-static MACHINE_DRIVER_START( xsleenab )
-	MDRV_IMPORT_FROM(xsleena)
+static MACHINE_CONFIG_DERIVED( xsleenab, xsleena )
 	MDRV_DEVICE_REMOVE("mcu")
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 
 /***************************************************************************

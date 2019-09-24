@@ -41,9 +41,9 @@
 #include "devlegcy.h"
 
 
-/**************************************************************************/
+//**************************************************************************
 //  LEGACY DEVICE CONFIGURATION
-/**************************************************************************/
+//**************************************************************************
 
 //-------------------------------------------------
 //  legacy_device_config_base - constructor
@@ -54,12 +54,12 @@ legacy_device_config_base::legacy_device_config_base(const machine_config &mconf
 	  m_get_config_func(get_config),
 	  m_inline_config(NULL)
 {
-	/* allocate a buffer for the inline configuration */
+	// allocate a buffer for the inline configuration
 	UINT32 configlen = (UINT32)get_legacy_config_int(DEVINFO_INT_INLINE_CONFIG_BYTES);
 	if (configlen != 0)
 		m_inline_config = global_alloc_array_clear(UINT8, configlen);
 
-	/* set the proper name */
+	// set the proper name
 	m_name = get_legacy_config_string(DEVINFO_STR_NAME);
 }
 
@@ -128,6 +128,65 @@ const char *legacy_device_config_base::get_legacy_config_string(UINT32 state) co
 
 
 //-------------------------------------------------
+//  static_set_inline32 - configuration helper to
+//  set a 32-bit value in the inline configuration
+//-------------------------------------------------
+
+void legacy_device_config_base::static_set_inline32(device_config *device, UINT32 offset, UINT32 size, UINT32 value)
+{
+	legacy_device_config_base *legacy = downcast<legacy_device_config_base *>(device);
+	void *dest = reinterpret_cast<UINT8 *>(legacy->m_inline_config) + offset;
+	if (size == 1)
+		*reinterpret_cast<UINT8 *>(dest) = value;
+	else if (size == 2)
+		*reinterpret_cast<UINT16 *>(dest) = value;
+	else if (size == 4)
+		*reinterpret_cast<UINT32 *>(dest) = value;
+	else
+		throw emu_fatalerror("Unexpected size %d in legacy_device_config_base::static_set_inline32", size);
+}
+
+
+//-------------------------------------------------
+//  static_set_inline64 - configuration helper to
+//  set a 64-bit value in the inline configuration
+//-------------------------------------------------
+
+void legacy_device_config_base::static_set_inline64(device_config *device, UINT32 offset, UINT32 size, UINT64 value)
+{
+	legacy_device_config_base *legacy = downcast<legacy_device_config_base *>(device);
+	void *dest = reinterpret_cast<UINT8 *>(legacy->m_inline_config) + offset;
+	if (size == 1)
+		*reinterpret_cast<UINT8 *>(dest) = value;
+	else if (size == 2)
+		*reinterpret_cast<UINT16 *>(dest) = value;
+	else if (size == 4)
+		*reinterpret_cast<UINT32 *>(dest) = value;
+	else if (size == 8)
+		*reinterpret_cast<UINT64 *>(dest) = value;
+	else
+		throw emu_fatalerror("Unexpected size %d in legacy_device_config_base::static_set_inline64", size);
+}
+
+
+//-------------------------------------------------
+//  static_set_inline_float - configuration helper 
+//  to set a floating-point value in the inline
+//  configuration
+//-------------------------------------------------
+
+void legacy_device_config_base::static_set_inline_float(device_config *device, UINT32 offset, UINT32 size, float value)
+{
+	legacy_device_config_base *legacy = downcast<legacy_device_config_base *>(device);
+	void *dest = reinterpret_cast<UINT8 *>(legacy->m_inline_config) + offset;
+	if (size == 4)
+		*reinterpret_cast<float *>(dest) = value;
+	else
+		throw emu_fatalerror("Unexpected size %d in legacy_device_config_base::static_set_inline_float", size);
+}
+
+
+//-------------------------------------------------
 //  device_validity_check - perform validity
 //  checks on a device configuration
 //-------------------------------------------------
@@ -142,9 +201,9 @@ bool legacy_device_config_base::device_validity_check(const game_driver &driver)
 
 
 
-/**************************************************************************/
+//**************************************************************************
 //  LIVE LEGACY DEVICE
-/**************************************************************************/
+//**************************************************************************
 
 //-------------------------------------------------
 //  legacy_device_base - constructor
@@ -200,9 +259,10 @@ void legacy_device_base::device_reset()
 }
 
 
-/**************************************************************************/
+
+//**************************************************************************
 //  LEGACY SOUND DEVICE CONFIGURATION
-/**************************************************************************/
+//**************************************************************************
 
 //-------------------------------------------------
 //  legacy_sound_device_config_base - constructor
@@ -215,9 +275,10 @@ legacy_sound_device_config_base::legacy_sound_device_config_base(const machine_c
 }
 
 
-/**************************************************************************/
+
+//**************************************************************************
 //  LIVE LEGACY SOUND DEVICE
-/**************************************************************************/
+//**************************************************************************
 
 //-------------------------------------------------
 //  legacy_sound_device_base - constructor
@@ -230,9 +291,10 @@ legacy_sound_device_base::legacy_sound_device_base(running_machine &machine, con
 }
 
 
-/**************************************************************************/
+
+//**************************************************************************
 //  LEGACY MEMORY DEVICE CONFIGURATION
-/**************************************************************************/
+//**************************************************************************
 
 //-------------------------------------------------
 //  legacy_memory_device_config_base - constructor
@@ -265,9 +327,10 @@ void legacy_memory_device_config_base::device_config_complete()
 }
 
 
-/**************************************************************************/
+
+//**************************************************************************
 //  LIVE LEGACY MEMORY DEVICE
-/**************************************************************************/
+//**************************************************************************
 
 //-------------------------------------------------
 //  legacy_memory_device_base - constructor
@@ -280,9 +343,10 @@ legacy_memory_device_base::legacy_memory_device_base(running_machine &machine, c
 }
 
 
-/**************************************************************************/
+
+//**************************************************************************
 //  LEGACY NVRAM DEVICE CONFIGURATION
-/**************************************************************************/
+//**************************************************************************
 
 //-------------------------------------------------
 //  legacy_nvram_device_config_base - constructor
@@ -295,9 +359,10 @@ legacy_nvram_device_config_base::legacy_nvram_device_config_base(const machine_c
 }
 
 
-/**************************************************************************/
+
+//**************************************************************************
 //  LIVE LEGACY NVRAM DEVICE
-/**************************************************************************/
+//**************************************************************************
 
 //-------------------------------------------------
 //  legacy_nvram_device_base - constructor

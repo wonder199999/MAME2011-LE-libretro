@@ -27,11 +27,20 @@
 
 #define VPRINTF(x)		do { if (VERBOSE) mame_printf_debug x; } while (0)
 
+
+
 /***************************************************************************
     CONSTANTS
 ***************************************************************************/
 
 #define MAX_MIXER_CHANNELS		100
+
+
+/***************************************************************************
+    DEVICE DEFINITIONS
+***************************************************************************/
+
+const device_type SPEAKER = speaker_device_config::static_alloc_device_config;
 
 
 
@@ -41,21 +50,21 @@
 
 struct _sound_private
 {
-	emu_timer	*update_timer;
+	emu_timer *update_timer;
 
-	int		totalsnd;
+	int totalsnd;
 
-	UINT32		finalmix_leftover;
-	INT16		*finalmix;
-	INT32		*leftmix;
-	INT32		*rightmix;
+	UINT32 finalmix_leftover;
+	INT16 *finalmix;
+	INT32 *leftmix;
+	INT32 *rightmix;
 
-	int		muted;
-	int		attenuation;
-	int		enabled;
-	int		nosound_mode;
+	int muted;
+	int attenuation;
+	int enabled;
+	int nosound_mode;
 
-	wav_file	*wavfile;
+	wav_file *wavfile;
 };
 
 
@@ -71,7 +80,6 @@ static void sound_resume(running_machine &machine);
 static void sound_load(running_machine *machine, int config_type, xml_data_node *parentnode);
 static void sound_save(running_machine *machine, int config_type, xml_data_node *parentnode);
 static TIMER_CALLBACK( sound_update );
-static void route_sound(running_machine *machine);
 
 
 
@@ -115,12 +123,17 @@ void sound_init(running_machine *machine)
 {
 	sound_private *global;
 	const char *filename;
+	const char *filenameavi;
 
 	machine->sound_data = global = auto_alloc_clear(machine, sound_private);
 
-	/* handle -nosound */
+	/* get filename for WAV file or AVI file if specified */
+	filename = options_get_string(machine->options(), OPTION_WAVWRITE);
+	filenameavi = options_get_string(machine->options(), OPTION_AVIWRITE);
+
+	/* handle -nosound and lower sample rate if not recording WAV or AVI*/
 	global->nosound_mode = !options_get_bool(machine->options(), OPTION_SOUND);
-	if (global->nosound_mode)
+	if (global->nosound_mode && filename[0] == 0 && filenameavi[0] == 0)
 		machine->sample_rate = 11025;
 
 	/* count the speakers */
@@ -135,12 +148,7 @@ void sound_init(running_machine *machine)
 	global->update_timer = timer_alloc(machine, sound_update, NULL);
 	timer_adjust_periodic(global->update_timer, STREAMS_UPDATE_ATTOTIME, 0, STREAMS_UPDATE_ATTOTIME);
 
-	/* finally, do all the routing */
-	VPRINTF(("route_sound\n"));
-	route_sound(machine);
-
 	/* open the output WAV file if specified */
-	filename = options_get_string(machine->options(), OPTION_WAVWRITE);
 	if (filename[0] != 0)
 		global->wavfile = wav_open(filename, machine->sample_rate, 2);
 
@@ -174,52 +182,6 @@ static void sound_exit(running_machine &machine)
 	/* reset variables */
 	global->totalsnd = 0;
 }
-
-
-
-/***************************************************************************
-    INITIALIZATION HELPERS
-***************************************************************************/
-
-/*-------------------------------------------------
-    route_sound - route sound outputs to target
-    inputs
--------------------------------------------------*/
-
-static void route_sound(running_machine *machine)
-{
-	/* iterate again over all the sound chips */
-	device_sound_interface *sound = NULL;
-	int numoutputs, inputnum, streaminput, streamoutput;
-
-	for (bool gotone = machine->m_devicelist.first(sound); gotone; gotone = sound->next(sound))
-	{
-		numoutputs = stream_get_device_outputs(*sound);
-
-		/* iterate over all routes */
-		for (const device_config_sound_interface::sound_route *route = sound->sound_config().m_route_list; route != NULL; route = route->m_next)
-		{
-			device_t *target_device = machine->device(route->m_target);
-			if (target_device->type() == SPEAKER)
-				continue;
-
-			inputnum = route->m_input;
-
-			/* iterate over all outputs, matching any that apply */
-			for (int outputnum = 0; outputnum < numoutputs; outputnum++)
-			{
-				if (route->m_output == outputnum || route->m_output == ALL_OUTPUTS)
-				{
-					sound_stream *inputstream, *stream;
-					if (stream_device_input_to_stream_input(target_device, inputnum++, &inputstream, &streaminput))
-						if (stream_device_output_to_stream_output(*sound, outputnum, &stream, &streamoutput))
-							stream_set_input(inputstream, streaminput, stream, streamoutput, route->m_gain);
-				}
-			}
-		}
-	}
-}
-
 
 
 /***************************************************************************
@@ -395,43 +357,47 @@ static void sound_save(running_machine *machine, int config_type, xml_data_node 
 
 static TIMER_CALLBACK( sound_update )
 {
-	sound_private *global = machine->sound_data;
-	UINT32 finalmix_step, finalmix_offset = 0;
-	INT32 *leftmix = global->leftmix;
-	INT32 *rightmix = global->rightmix;
-	INT16 *finalmix = global->finalmix;
-
+	UINT32 finalmix_step, finalmix_offset;
 	int samples_this_update = 0;
+	int sample;
+	sound_private *global = machine->sound_data;
+	INT16 *finalmix;
+	INT32 *leftmix, *rightmix;
+
+	VPRINTF(("sound_update\n"));
+
+	g_profiler.start(PROFILER_SOUND);
+
+	leftmix = global->leftmix;
+	rightmix = global->rightmix;
+	finalmix = global->finalmix;
+
 	/* force all the speaker streams to generate the proper number of samples */
 	for (speaker_device *speaker = speaker_first(*machine); speaker != NULL; speaker = speaker_next(speaker))
-		speaker->mix(leftmix, rightmix, samples_this_update, !global->enabled || global->nosound_mode);
+		speaker->mix(leftmix, rightmix, samples_this_update, !global->enabled);
 
 	/* now downmix the final result */
 	finalmix_step = video_get_speed_factor();
-
-	int sample;
+	finalmix_offset = 0;
 	for (sample = global->finalmix_leftover; sample < samples_this_update * 100; sample += finalmix_step)
 	{
 		int sampindex = sample / 100;
+		INT32 samp;
 
 		/* clamp the left side */
-		INT32 samp = leftmix[sampindex];
-
+		samp = leftmix[sampindex];
 		if (samp < -32768)
 			samp = -32768;
 		else if (samp > 32767)
 			samp = 32767;
-
 		finalmix[finalmix_offset++] = samp;
 
 		/* clamp the right side */
 		samp = rightmix[sampindex];
-
 		if (samp < -32768)
 			samp = -32768;
 		else if (samp > 32767)
 			samp = 32767;
-
 		finalmix[finalmix_offset++] = samp;
 	}
 	global->finalmix_leftover = sample - samples_this_update * 100;
@@ -439,20 +405,24 @@ static TIMER_CALLBACK( sound_update )
 	/* play the result */
 	if (finalmix_offset > 0)
 	{
-		osd_update_audio_stream(machine, finalmix, finalmix_offset >> 1);
+		if (!global->nosound_mode)
+			osd_update_audio_stream(machine, finalmix, finalmix_offset / 2);
+		video_avi_add_sound(machine, finalmix, finalmix_offset / 2);
 		if (global->wavfile != NULL)
 			wav_add_data_16(global->wavfile, finalmix, finalmix_offset);
 	}
 
 	/* update the streamer */
 	streams_update(machine);
+
+	g_profiler.stop();
 }
 
 
 
 //**************************************************************************
 //  SPEAKER DEVICE CONFIGURATION
-//**************************************************************************/
+//**************************************************************************
 
 //-------------------------------------------------
 //  speaker_device_config - constructor
@@ -489,24 +459,23 @@ device_t *speaker_device_config::alloc_device(running_machine &machine) const
 
 
 //-------------------------------------------------
-//  device_config_complete - perform any
-//  operations now that the configuration is
-//  complete
+//  static_set_position - configuration helper to 
+//  set the speaker position
 //-------------------------------------------------
 
-void speaker_device_config::device_config_complete()
+void speaker_device_config::static_set_position(device_config *device, double x, double y, double z)
 {
-	// move inline data into its final home
-	m_x = static_cast<double>(static_cast<INT32>(m_inline_data[INLINE_X])) / (double)(1 << 24);
-	m_y = static_cast<double>(static_cast<INT32>(m_inline_data[INLINE_Y])) / (double)(1 << 24);
-	m_z = static_cast<double>(static_cast<INT32>(m_inline_data[INLINE_Z])) / (double)(1 << 24);
+	speaker_device_config *speaker = downcast<speaker_device_config *>(device);
+	speaker->m_x = x;
+	speaker->m_y = y;
+	speaker->m_z = z;
 }
 
 
 
 //**************************************************************************
 //  LIVE SPEAKER DEVICE
-//**************************************************************************/
+//**************************************************************************
 
 //-------------------------------------------------
 //  speaker_device - constructor
@@ -635,15 +604,17 @@ void speaker_device::device_post_load()
 
 void speaker_device::mixer_update(stream_sample_t **inputs, stream_sample_t **outputs, int samples)
 {
+	VPRINTF(("Mixer_update(%d)\n", samples));
+
 	// loop over samples
 	for (int pos = 0; pos < samples; pos++)
 	{
 		INT32 sample = inputs[0][pos];
+		int inp;
 
 		// add up all the inputs
-		for (int inp = 1; inp < m_inputs; inp++)
+		for (inp = 1; inp < m_inputs; inp++)
 			sample += inputs[inp][pos];
-
 		outputs[0][pos] = sample;
 	}
 }
@@ -660,7 +631,7 @@ void speaker_device::mix(INT32 *leftmix, INT32 *rightmix, int &samples_this_upda
 		return;
 
 	// update the stream, getting the start/end pointers around the operation
-	int numsamples, sample;
+	int numsamples;
 	const stream_sample_t *stream_buf = stream_get_output_since_last_update(m_mixer_stream, 0, &numsamples);
 
 	// set or assert that all streams have the same count
@@ -676,7 +647,7 @@ void speaker_device::mix(INT32 *leftmix, INT32 *rightmix, int &samples_this_upda
 
 #ifdef MAME_DEBUG
 	// debug version: keep track of the maximum sample
-	for (sample = 0; sample < samples_this_update; sample++)
+	for (int sample = 0; sample < samples_this_update; sample++)
 	{
 		if (stream_buf[sample] > m_max_sample)
 			m_max_sample = stream_buf[sample];
@@ -687,27 +658,26 @@ void speaker_device::mix(INT32 *leftmix, INT32 *rightmix, int &samples_this_upda
 		m_total_samples++;
 	}
 #endif
+
 	// mix if sound is enabled
 	if (!suppress)
 	{
 		// if the speaker is centered, send to both left and right
 		if (m_config.m_x == 0)
-		{
-			for (sample = 0; sample < samples_this_update; sample++)
+			for (int sample = 0; sample < samples_this_update; sample++)
 			{
 				leftmix[sample] += stream_buf[sample];
 				rightmix[sample] += stream_buf[sample];
 			}
-		}
 
 		// if the speaker is to the left, send only to the left
 		else if (m_config.m_x < 0)
-			for (sample = 0; sample < samples_this_update; sample++)
+			for (int sample = 0; sample < samples_this_update; sample++)
 				leftmix[sample] += stream_buf[sample];
 
 		// if the speaker is to the right, send only to the right
 		else
-			for (sample = 0; sample < samples_this_update; sample++)
+			for (int sample = 0; sample < samples_this_update; sample++)
 				rightmix[sample] += stream_buf[sample];
 	}
 }
@@ -790,7 +760,6 @@ float sound_get_user_gain(running_machine *machine, int index)
 {
 	int inputnum;
 	speaker_device *speaker = index_to_input(machine, index, inputnum);
-
 	return (speaker != NULL) ? speaker->input_gain(inputnum) : 0;
 }
 
@@ -804,7 +773,6 @@ float sound_get_default_gain(running_machine *machine, int index)
 {
 	int inputnum;
 	speaker_device *speaker = index_to_input(machine, index, inputnum);
-
 	return (speaker != NULL) ? speaker->input_default_gain(inputnum) : 0;
 }
 
@@ -818,8 +786,5 @@ const char *sound_get_user_gain_name(running_machine *machine, int index)
 {
 	int inputnum;
 	speaker_device *speaker = index_to_input(machine, index, inputnum);
-
 	return (speaker != NULL) ? speaker->input_name(inputnum) : 0;
 }
-
-const device_type SPEAKER = speaker_device_config::static_alloc_device_config;

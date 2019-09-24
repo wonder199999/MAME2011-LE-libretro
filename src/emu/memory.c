@@ -218,9 +218,6 @@
 // banking constants
 const int BANK_ENTRY_UNSPECIFIED = -1;
 
-// shares are initially mapped to this invalid pointer
-static void *UNMAPPED_SHARE_PTR = ((void *)-1);
-
 // other address map constants
 const int MEMORY_BLOCK_CHUNK = 65536;			// minimum chunk size of allocated memory blocks
 
@@ -386,6 +383,32 @@ private:
 };
 
 
+
+// ======================> memory_share
+
+// a memory share contains information about shared memory region
+class memory_share
+{
+public:
+	// construction/destruction
+	memory_share(size_t size, void *ptr = NULL)
+		: m_ptr(ptr),
+		  m_size(size) { }
+
+	// getters
+	void *ptr() const { return m_ptr; }
+	size_t size() const { return m_size; }
+
+	// setters
+	void set_ptr(void *ptr) { m_ptr = ptr; }
+
+private:
+	// internal state
+	void				*m_ptr;			// pointer to the memory backing the region
+	size_t				m_size;			// size of the shared region
+};
+
+
 // ======================> handler_entry
 
 // a handler entry contains information about a memory handler
@@ -452,6 +475,7 @@ protected:
 	UINT8				**m_rambaseptr;			// pointer to the bank base
 	UINT8					m_subunits;		// for width stubs, the number of subunits
 	UINT8					m_subshift[8];		// for width stubs, the shift of each subunit
+	UINT64					m_invsubmask;		// inverted mask of the populated subunits
 };
 
 
@@ -643,12 +667,12 @@ private:
 class address_table : public bindable_object
 {
 	// address map lookup table definitions
-	static const int LEVEL1_BITS	= 18;						// number of address bits in the level 1 table
-	static const int LEVEL2_BITS	= 32 - LEVEL1_BITS;			// number of address bits in the level 2 table
-	static const int SUBTABLE_COUNT	= 64;						// number of slots reserved for subtables
+	static const int LEVEL1_BITS	= 18;				// number of address bits in the level 1 table
+	static const int LEVEL2_BITS	= 32 - LEVEL1_BITS;		// number of address bits in the level 2 table
+	static const int SUBTABLE_COUNT	= 64;				// number of slots reserved for subtables
 	static const int SUBTABLE_BASE	= 256 - SUBTABLE_COUNT;		// first index of a subtable
-	static const int ENTRY_COUNT	= SUBTABLE_BASE;			// number of legitimate (non-subtable) entries
-	static const int SUBTABLE_ALLOC	= 8;						// number of subtables to allocate at a time
+	static const int ENTRY_COUNT	= SUBTABLE_BASE;		// number of legitimate (non-subtable) entries
+	static const int SUBTABLE_ALLOC	= 8;				// number of subtables to allocate at a time
 
 	inline int level2_bits() const { return m_large ? LEVEL2_BITS : 0; }
 
@@ -773,6 +797,8 @@ private:
 	template<typename _UintType>
 	_UintType watchpoint_r(address_space &space, offs_t offset, _UintType mask)
 	{
+//		m_space.device().debug()->memory_read_hook(m_space, offset * sizeof(_UintType), mask);
+
 		UINT8 *oldtable = m_live_lookup;
 		m_live_lookup = m_table;
 		_UintType result;
@@ -821,6 +847,8 @@ private:
 	template<typename _UintType>
 	void watchpoint_w(address_space &space, offs_t offset, _UintType data, _UintType mask)
 	{
+//		m_space.device().debug()->memory_write_hook(m_space, offset * sizeof(_UintType), data, mask);
+
 		UINT8 *oldtable = m_live_lookup;
 		m_live_lookup = m_table;
 		switch (sizeof(_UintType))
@@ -1354,7 +1382,7 @@ struct _memory_private
 	tagmap_t<memory_bank *>			bankmap;			// map for fast bank lookups
 	UINT8					banknext;			// next bank to allocate
 
-	tagmap_t<void *>			sharemap;			// map for share lookups
+	tagmap_t<memory_share *>		sharemap;			// map for share lookups
 };
 
 
@@ -1539,6 +1567,27 @@ void memory_set_bankptr(running_machine *machine, const char *tag, void *base)
 
 	// set the base
 	bank->set_base(base);
+}
+
+
+//-------------------------------------------------
+//  memory_get_shared - get a pointer to a shared
+//  memory region by tag
+//-------------------------------------------------
+
+void *memory_get_shared(running_machine &machine, const char *tag)
+{
+	size_t size;
+	return memory_get_shared(machine, tag, size);
+}
+
+void *memory_get_shared(running_machine &machine, const char *tag, size_t &length)
+{
+	memory_share *share = machine.memory_data->sharemap.find(tag);
+	if (share == NULL)
+		return NULL;
+	length = share->size();
+	return share->ptr();
 }
 
 
@@ -1775,16 +1824,19 @@ void address_space::prepare_map()
 	// make a pass over the address map, adjusting for the device and getting memory pointers
 	for (address_map_entry *entry = m_map->m_entrylist.first(); entry != NULL; entry = entry->next())
 	{
-		// if we have a share entry, add it to our map
-		if (entry->m_share != NULL)
-			m_machine.memory_data->sharemap.add(entry->m_share, UNMAPPED_SHARE_PTR, false);
-
 		// computed adjusted addresses first
 		entry->m_bytestart = entry->m_addrstart;
 		entry->m_byteend = entry->m_addrend;
 		entry->m_bytemirror = entry->m_addrmirror;
 		entry->m_bytemask = entry->m_addrmask;
 		adjust_addresses(entry->m_bytestart, entry->m_byteend, entry->m_bytemask, entry->m_bytemirror);
+
+		// if we have a share entry, add it to our map
+		if (entry->m_share != NULL && m_machine.memory_data->sharemap.find(entry->m_share) == NULL)
+		{
+			memory_share *share = auto_alloc(&m_machine, memory_share(entry->m_byteend + 1 - entry->m_bytestart));
+			m_machine.memory_data->sharemap.add(entry->m_share, share, false);
+		}
 
 		// if this is a ROM handler without a specified region, attach it to the implicit region
 		if (m_spacenum == ADDRESS_SPACE_0 && entry->m_read.m_type == AMH_ROM && entry->m_region == NULL)
@@ -1883,7 +1935,7 @@ void address_space::populate_map_entry(const address_map_entry &entry, read_or_w
 		case AMH_DEVICE_DELEGATE:
 			if (data.m_type == AMH_DRIVER_DELEGATE)
 			{
-				object = m_machine.driver_data<driver_data_t>();
+				object = m_machine.driver_data<driver_device>();
 				if (object == NULL)
 					throw emu_fatalerror("Attempted to map a driver delegate in space %s of device '%s' when there is no driver data\n", m_name, m_device.tag());
 			}
@@ -2135,9 +2187,9 @@ address_map_entry *address_space::block_assign_intersecting(offs_t bytestart, of
 		// if we haven't assigned this block yet, see if we have a mapped shared pointer for it
 		if (entry->m_memory == NULL && entry->m_share != NULL)
 		{
-			void *shareptr = memdata->sharemap.find(entry->m_share);
-			if (shareptr != UNMAPPED_SHARE_PTR)
-				entry->m_memory = shareptr;
+			memory_share *share = memdata->sharemap.find(entry->m_share);
+			if (share != NULL && share->ptr() != NULL)
+				entry->m_memory = share->ptr();
 		}
 
 		// otherwise, look for a match in this block
@@ -2147,9 +2199,9 @@ address_map_entry *address_space::block_assign_intersecting(offs_t bytestart, of
 		// if we're the first match on a shared pointer, assign it now
 		if (entry->m_memory != NULL && entry->m_share != NULL)
 		{
-			void *shareptr = memdata->sharemap.find(entry->m_share);
-			if (shareptr == UNMAPPED_SHARE_PTR)
-				memdata->sharemap.add(entry->m_share, entry->m_memory, TRUE);
+			memory_share *share = memdata->sharemap.find(entry->m_share);
+			if (share != NULL && share->ptr() == NULL)
+				share->set_ptr(entry->m_memory);
 		}
 
 		// keep track of the first unassigned entry
@@ -2745,6 +2797,14 @@ bool address_space::needs_backing_store(const address_map_entry *entry)
 	// if we are asked to provide a base pointer, then yes, we do need backing
 	if (entry->m_baseptr != NULL || entry->m_baseptroffs_plus1 != 0 || entry->m_genbaseptroffs_plus1 != 0)
 		return true;
+
+	// if we are sharing, and we don't have a pointer yet, create one
+	if (entry->m_share != NULL)
+	{
+		memory_share *share = m_machine.memory_data->sharemap.find(entry->m_share);
+		if (share != NULL && share->ptr() == NULL)
+			return true;
+	}
 
 	// if we're writing to any sort of bank or RAM, then yes, we do need backing
 	if (entry->m_write.m_type == AMH_BANK || entry->m_write.m_type == AMH_RAM)
@@ -4087,6 +4147,9 @@ void handler_entry::configure_subunits(UINT64 handlermask, int handlerbits)
 	UINT64 unitmask = ((UINT64)1 << handlerbits) - 1;
 	assert(handlermask != 0);
 
+	// set the inverse mask
+	m_invsubmask = ~handlermask;
+
 	// compute the maximum possible subunits
 	int maxunits = m_datawidth / handlerbits;
 	assert(maxunits > 1);
@@ -4333,7 +4396,7 @@ void handler_entry_read::set_ioport(const input_port_config &ioport)
 
 UINT16 handler_entry_read::read_stub_16_from_8(address_space &space, offs_t offset, UINT16 mask)
 {
-	UINT16 result = 0;
+	UINT16 result = space.unmap() & m_invsubmask;
 	for (int index = 0; index < m_subunits; index++)
 	{
 		int shift = m_subshift[index];
@@ -4352,7 +4415,7 @@ UINT16 handler_entry_read::read_stub_16_from_8(address_space &space, offs_t offs
 
 UINT32 handler_entry_read::read_stub_32_from_8(address_space &space, offs_t offset, UINT32 mask)
 {
-	UINT32 result = 0;
+	UINT32 result = space.unmap() & m_invsubmask;
 	for (int index = 0; index < m_subunits; index++)
 	{
 		int shift = m_subshift[index];
@@ -4371,7 +4434,7 @@ UINT32 handler_entry_read::read_stub_32_from_8(address_space &space, offs_t offs
 
 UINT64 handler_entry_read::read_stub_64_from_8(address_space &space, offs_t offset, UINT64 mask)
 {
-	UINT64 result = 0;
+	UINT64 result = space.unmap() & m_invsubmask;
 	for (int index = 0; index < m_subunits; index++)
 	{
 		int shift = m_subshift[index];
@@ -4390,7 +4453,7 @@ UINT64 handler_entry_read::read_stub_64_from_8(address_space &space, offs_t offs
 
 UINT32 handler_entry_read::read_stub_32_from_16(address_space &space, offs_t offset, UINT32 mask)
 {
-	UINT32 result = 0;
+	UINT32 result = space.unmap() & m_invsubmask;
 	for (int index = 0; index < m_subunits; index++)
 	{
 		int shift = m_subshift[index];
@@ -4409,7 +4472,7 @@ UINT32 handler_entry_read::read_stub_32_from_16(address_space &space, offs_t off
 
 UINT64 handler_entry_read::read_stub_64_from_16(address_space &space, offs_t offset, UINT64 mask)
 {
-	UINT64 result = 0;
+	UINT64 result = space.unmap() & m_invsubmask;
 	for (int index = 0; index < m_subunits; index++)
 	{
 		int shift = m_subshift[index];
@@ -4428,7 +4491,7 @@ UINT64 handler_entry_read::read_stub_64_from_16(address_space &space, offs_t off
 
 UINT64 handler_entry_read::read_stub_64_from_32(address_space &space, offs_t offset, UINT64 mask)
 {
-	UINT64 result = 0;
+	UINT64 result = space.unmap() & m_invsubmask;
 	for (int index = 0; index < m_subunits; index++)
 	{
 		int shift = m_subshift[index];

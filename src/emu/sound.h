@@ -49,19 +49,11 @@ public:
 	static device_config *static_alloc_device_config(const machine_config &mconfig, const char *tag, const device_config *owner, UINT32 clock);
 	virtual device_t *alloc_device(running_machine &machine) const;
 
-	// indexes to inline data
-	enum
-	{
-		INLINE_X,
-		INLINE_Y,
-		INLINE_Z
-	};
+	// inline configuration helpers
+	static void static_set_position(device_config *device, double x, double y, double z);
 
 protected:
-	// device_config overrides
-	virtual void device_config_complete();
-
-	// internal state
+	// inline configuration state
 	double		m_x;
 	double		m_y;
 	double		m_z;
@@ -103,16 +95,16 @@ protected:
 	// a single input
 	struct speaker_input
 	{
-		float			m_gain;				// current gain
+		float			m_gain;					// current gain
 		float			m_default_gain;			// default gain
-		astring			m_name;				// name of this input
+		astring			m_name;					// name of this input
 	};
 
 	// internal state
 	const speaker_device_config &m_config;
-	sound_stream			*m_mixer_stream;		// mixing stream
-	int					m_inputs;		// number of input streams
-	speaker_input			*m_input;			// array of input information
+	sound_stream *		m_mixer_stream;			// mixing stream
+	int					m_inputs;				// number of input streams
+	speaker_input *		m_input;				// array of input information
 #ifdef MAME_DEBUG
 	INT32				m_max_sample;			// largest sample value we've seen
 	INT32				m_clipped_samples;		// total number of clipped samples
@@ -131,17 +123,15 @@ extern const device_type SPEAKER;
 ***************************************************************************/
 
 /* add/remove speakers */
-#define MDRV_SPEAKER_ADD(_tag, _x, _y, _z)								\
-	MDRV_DEVICE_ADD(_tag, SPEAKER, 0)								\
-	MDRV_DEVICE_INLINE_DATA32(speaker_device_config::INLINE_X, (INT32)((_x) * (double)(1 << 24)))	\
-	MDRV_DEVICE_INLINE_DATA32(speaker_device_config::INLINE_Y, (INT32)((_y) * (double)(1 << 24)))	\
-	MDRV_DEVICE_INLINE_DATA32(speaker_device_config::INLINE_Z, (INT32)((_z) * (double)(1 << 24)))
+#define MDRV_SPEAKER_ADD(_tag, _x, _y, _z) \
+	MDRV_DEVICE_ADD(_tag, SPEAKER, 0) \
+	speaker_device_config::static_set_position(device, _x, _y, _z); \
 
-#define MDRV_SPEAKER_STANDARD_MONO(_tag)		\
+#define MDRV_SPEAKER_STANDARD_MONO(_tag) \
 	MDRV_SPEAKER_ADD(_tag, 0.0, 0.0, 1.0)
 
-#define MDRV_SPEAKER_STANDARD_STEREO(_tagl, _tagr)	\
-	MDRV_SPEAKER_ADD(_tagl, -0.2, 0.0, 1.0)		\
+#define MDRV_SPEAKER_STANDARD_STEREO(_tagl, _tagr) \
+	MDRV_SPEAKER_ADD(_tagl, -0.2, 0.0, 1.0) \
 	MDRV_SPEAKER_ADD(_tagr, 0.2, 0.0, 1.0)
 
 
@@ -178,7 +168,7 @@ void sound_set_output_gain(device_t *device, int output, float gain);
 
 //**************************************************************************
 //  INLINE HELPERS
-//**************************************************************************/
+//**************************************************************************
 
 //-------------------------------------------------
 //  speaker_count - return the number of speaker

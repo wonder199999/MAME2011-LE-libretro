@@ -41,13 +41,11 @@
 #include "machine/nvram.h"
 
 
-
 //**************************************************************************
 //  DEVICE DEFINITIONS
 //**************************************************************************
 
 const device_type NVRAM = nvram_device_config::static_alloc_device_config;
-
 
 
 //**************************************************************************
@@ -100,7 +98,7 @@ void nvram_device_config::static_set_default_value(device_config *device, defaul
 
 
 //-------------------------------------------------
-//  static_set_custom_handler - configuration
+//  static_set_custom_handler - configuration 
 //  helper to set a custom callback
 //-------------------------------------------------
 

@@ -39,7 +39,10 @@
 
 #include "emu.h"
 #include "emuopts.h"
+#include "profiler.h"
 #include "png.h"
+#include "debugger.h"
+#include "debugint/debugint.h"
 #include "rendutil.h"
 #include "ui.h"
 #include "aviio.h"
@@ -48,80 +51,97 @@
 #include "lh/snap.lh"
 
 
+
 /***************************************************************************
-	CONSTANTS
+    DEBUGGING
+***************************************************************************/
+
+#define LOG_THROTTLE				(0)
+#define VERBOSE						(0)
+#define LOG_PARTIAL_UPDATES(x)		do { if (VERBOSE) logerror x; } while (0)
+
+
+
+/***************************************************************************
+    CONSTANTS
 ***************************************************************************/
 
 #define SUBSECONDS_PER_SPEED_UPDATE	(ATTOSECONDS_PER_SECOND / 4)
 #define PAUSED_REFRESH_RATE			(30)
 
+/***************************************************************************
+    DEVICE DEFINITIONS
+***************************************************************************/
+
+const device_type SCREEN = screen_device_config::static_alloc_device_config;
+
 
 /***************************************************************************
-	TYPE DEFINITIONS
+    TYPE DEFINITIONS
 ***************************************************************************/
 
 typedef struct _video_global video_global;
 struct _video_global
 {
 	/* screenless systems */
-	emu_timer				*screenless_frame_timer;	/* timer to signal VBLANK start */
+	emu_timer *				screenless_frame_timer;	/* timer to signal VBLANK start */
 
 	/* throttling calculations */
-	osd_ticks_t				throttle_last_ticks;		/* osd_ticks the last call to throttle */
+	osd_ticks_t				throttle_last_ticks;	/* osd_ticks the last call to throttle */
 	attotime				throttle_realtime;		/* real time the last call to throttle */
 	attotime				throttle_emutime;		/* emulated time the last call to throttle */
 	UINT32					throttle_history;		/* history of frames where we were fast enough */
 
 	/* dynamic speed computation */
-	osd_ticks_t 				speed_last_realtime;		/* real time at the last speed calculation */
+	osd_ticks_t 			speed_last_realtime;	/* real time at the last speed calculation */
 	attotime				speed_last_emutime;		/* emulated time at the last speed calculation */
 	double					speed_percent;			/* most recent speed percentage */
-	UINT32					partial_updates_this_frame;	/* partial update counter this frame */
+	UINT32					partial_updates_this_frame;/* partial update counter this frame */
 
 	/* overall speed computation */
-	UINT32					overall_real_seconds;		/* accumulated real seconds at normal speed */
+	UINT32					overall_real_seconds;	/* accumulated real seconds at normal speed */
 	osd_ticks_t				overall_real_ticks;		/* accumulated real ticks at normal speed */
 	attotime				overall_emutime;		/* accumulated emulated time at normal speed */
-	UINT32					overall_valid_counter;		/* number of consecutive valid time periods */
+	UINT32					overall_valid_counter;	/* number of consecutive valid time periods */
 
 	/* configuration */
-	UINT8					throttle;			/* flag: TRUE if we're currently throttled */
+	UINT8					throttle;				/* flag: TRUE if we're currently throttled */
 	UINT8					fastforward;			/* flag: TRUE if we're currently fast-forwarding */
 	UINT32					seconds_to_run;			/* number of seconds to run before quitting */
 	UINT8					auto_frameskip;			/* flag: TRUE if we're automatically frameskipping */
-	UINT32					speed;				/* overall speed (*100) */
+	UINT32					speed;					/* overall speed (*100) */
 
 	/* frameskipping */
 	UINT8					empty_skip_count;		/* number of empty frames we have skipped */
 	UINT8					frameskip_level;		/* current frameskip level */
 	UINT8					frameskip_counter;		/* counter that counts through the frameskip steps */
 	INT8					frameskip_adjust;
-	UINT8					skipping_this_frame;		/* flag: TRUE if we are skipping the current frame */
+	UINT8					skipping_this_frame;	/* flag: TRUE if we are skipping the current frame */
 	osd_ticks_t				average_oversleep;		/* average number of ticks the OSD oversleeps */
 
 	/* snapshot stuff */
-	render_target				*snap_target;			/* screen shapshot target */
-	bitmap_t				*snap_bitmap;			/* screen snapshot bitmap */
+	render_target *			snap_target;			/* screen shapshot target */
+	bitmap_t *				snap_bitmap;			/* screen snapshot bitmap */
 	UINT8					snap_native;			/* are we using native per-screen layouts? */
-	INT32					snap_width;			/* width of snapshots (0 == auto) */
+	INT32					snap_width;				/* width of snapshots (0 == auto) */
 	INT32					snap_height;			/* height of snapshots (0 == auto) */
 
 	/* movie recording */
-	mame_file				*mngfile;			/* handle to the open movie file */
-	avi_file				*avifile;			/* handle to the open movie file */
+	mame_file *				mngfile;				/* handle to the open movie file */
+	avi_file *				avifile;				/* handle to the open movie file */
 	attotime				movie_frame_period;		/* period of a single movie frame */
-	attotime				movie_next_frame_time;		/* time of next frame */
+	attotime				movie_next_frame_time;	/* time of next frame */
 	UINT32					movie_frame;			/* current movie frame number */
 };
 
 
+
 /***************************************************************************
-	GLOBAL VARIABLES
+    GLOBAL VARIABLES
 ***************************************************************************/
 
 /* global state */
 static video_global global;
-static bool allow_create_screenshot = false;
 
 /* frameskipping tables */
 static const UINT8 skiptable[FRAMESKIP_LEVELS][FRAMESKIP_LEVELS] =
@@ -141,8 +161,9 @@ static const UINT8 skiptable[FRAMESKIP_LEVELS][FRAMESKIP_LEVELS] =
 };
 
 
+
 /***************************************************************************
-	FUNCTION PROTOTYPES
+    FUNCTION PROTOTYPES
 ***************************************************************************/
 
 /* core implementation */
@@ -163,9 +184,16 @@ static void update_refresh_speed(running_machine *machine);
 static void create_snapshot_bitmap(device_t *screen);
 static file_error mame_fopen_next(running_machine *machine, const char *pathoption, const char *extension, mame_file **file);
 
+/* movie recording */
+static void video_mng_record_frame(running_machine *machine);
+static void video_avi_record_frame(running_machine *machine);
+
+/* software rendering */
+// static void rgb888_draw_primitives(const render_primitive_list &primlist, void *dstdata, UINT32 width, UINT32 height, UINT32 pitch);
+
 
 /***************************************************************************
-	INLINE FUNCTIONS
+    INLINE FUNCTIONS
 ***************************************************************************/
 
 /*-------------------------------------------------
@@ -230,12 +258,13 @@ INLINE int effective_throttle(running_machine *machine)
 
 INLINE int original_speed_setting(void)
 {
-	return options_get_float(mame_options(), OPTION_SPEED) * 100.0f + 0.5f;
+	return options_get_float(mame_options(), OPTION_SPEED) * 100.0 + 0.5;
 }
 
 
+
 /***************************************************************************
-	CORE IMPLEMENTATION
+    CORE IMPLEMENTATION
 ***************************************************************************/
 
 /*-------------------------------------------------
@@ -266,10 +295,6 @@ void video_init(running_machine *machine)
 	global.frameskip_level = options_get_int(machine->options(), OPTION_FRAMESKIP);
 	global.seconds_to_run = options_get_int(machine->options(), OPTION_SECONDS_TO_RUN);
 
-	/* call the PALETTE_INIT function */
-	if (machine->config->m_init_palette != NULL)
-		(*machine->config->m_init_palette)(machine, memory_region(machine, "proms"));
-
 	/* create a render target for snapshots */
 	viewname = options_get_string(machine->options(), OPTION_SNAPVIEW);
 	global.snap_native = (machine->primary_screen != NULL && (viewname[0] == 0 || strcmp(viewname, "native") == 0));
@@ -277,17 +302,19 @@ void video_init(running_machine *machine)
 	/* the native target is hard-coded to our internal layout and has all options disabled */
 	if (global.snap_native)
 	{
-		global.snap_target = render_target_alloc(machine, layout_snap, RENDER_CREATE_SINGLE_FILE | RENDER_CREATE_HIDDEN);
-		assert(global.snap_target != NULL);
-		render_target_set_layer_config(global.snap_target, 0);
+		global.snap_target = machine->render().target_alloc(layout_snap, RENDER_CREATE_SINGLE_FILE | RENDER_CREATE_HIDDEN);
+		global.snap_target->set_backdrops_enabled(false);
+		global.snap_target->set_overlays_enabled(false);
+		global.snap_target->set_bezels_enabled(false);
+		global.snap_target->set_screen_overlay_enabled(false);
+		global.snap_target->set_zoom_to_screen(false);
 	}
 	/* other targets select the specified view and turn off effects */
 	else
 	{
-		global.snap_target = render_target_alloc(machine, NULL, RENDER_CREATE_HIDDEN);
-		assert(global.snap_target != NULL);
-		render_target_set_view(global.snap_target, video_get_view_for_target(machine, global.snap_target, viewname, 0, 1));
-		render_target_set_layer_config(global.snap_target, render_target_get_layer_config(global.snap_target) & ~LAYER_CONFIG_ENABLE_SCREEN_OVERLAY);
+		global.snap_target = machine->render().target_alloc(NULL, RENDER_CREATE_HIDDEN);
+		global.snap_target->set_view(video_get_view_for_target(machine, global.snap_target, viewname, 0, 1));
+		global.snap_target->set_screen_overlay_enabled(false);
 	}
 
 	/* extract snap resolution if present */
@@ -318,17 +345,18 @@ void video_init(running_machine *machine)
 
 static void video_exit(running_machine &machine)
 {
+	int i;
+
 	/* stop recording any movie */
 	video_mng_end_recording(&machine);
 	video_avi_end_recording(&machine);
 
 	/* free all the graphics elements */
-	for (int i = 0; i < MAX_GFX_ELEMENTS; i++)
+	for (i = 0; i < MAX_GFX_ELEMENTS; i++)
 		gfx_element_free(machine.gfx[i]);
 
 	/* free the snapshot target */
-	if (global.snap_target != NULL)
-		render_target_free(global.snap_target);
+	machine.render().target_free(global.snap_target);
 	if (global.snap_bitmap != NULL)
 		global_free(global.snap_bitmap);
 
@@ -344,7 +372,7 @@ static void video_exit(running_machine &machine)
 
 
 /***************************************************************************
-	SCREEN MANAGEMENT
+    SCREEN MANAGEMENT
 ***************************************************************************/
 
 /*-------------------------------------------------
@@ -376,55 +404,60 @@ void video_frame_update(running_machine *machine, int debug)
 	assert(machine->config != NULL);
 
 	/* only render sound and video if we're in the running phase */
-	if (phase == MACHINE_PHASE_RUNNING)
+	if (phase == MACHINE_PHASE_RUNNING && (!machine->paused() || options_get_bool(machine->options(), OPTION_UPDATEINPAUSE)))
 	{
-		if ( !machine->paused() || options_get_bool(machine->options(), OPTION_UPDATEINPAUSE) )
-		{
-			int anything_changed = finish_screen_updates(machine);
+		int anything_changed = finish_screen_updates(machine);
 
-			/* if none of the screens changed and we haven't skipped too many frames in a row,
-			   mark this frame as skipped to prevent throttling; this helps for games that
-			   don't update their screen at the monitor refresh rate	*/
-			if ( !anything_changed && global.empty_skip_count++ < 3 )
-			{
-				if ( !global.auto_frameskip && global.frameskip_level == 0 )
-					skipped_it = TRUE;
-			}
-			else
-				global.empty_skip_count = 0;
-		}
+		/* if none of the screens changed and we haven't skipped too many frames in a row,
+           mark this frame as skipped to prevent throttling; this helps for games that
+           don't update their screen at the monitor refresh rate */
+		if (!anything_changed && !global.auto_frameskip && global.frameskip_level == 0 && global.empty_skip_count++ < 3)
+			skipped_it = TRUE;
+		else
+			global.empty_skip_count = 0;
 	}
 
 	/* draw the user interface */
-	ui_update_and_render(machine, render_container_get_ui());
+	ui_update_and_render(machine, &machine->render().ui_container());
+
+	/* update the internal render debugger */
+	debugint_update_during_game(machine);
 
 	/* if we're throttling, synchronize before rendering */
-	if (effective_throttle(machine))
-		if (!skipped_it)
-			update_throttle(machine, current_time);
+	if (!debug && !skipped_it && effective_throttle(machine))
+		update_throttle(machine, current_time);
 
 	/* ask the OSD to update */
-	osd_update(machine, skipped_it);
+	g_profiler.start(PROFILER_BLIT);
+	osd_update(machine, !debug && skipped_it);
+	g_profiler.stop();
 
 	/* perform tasks for this frame */
-	machine->call_notifiers(MACHINE_NOTIFY_FRAME);
+	if (!debug)
+		machine->call_notifiers(MACHINE_NOTIFY_FRAME);
 
 	/* update frameskipping */
-	update_frameskip(machine);
+	if (!debug)
+		update_frameskip(machine);
 
 	/* update speed computations */
-	if (!skipped_it)
+	if (!debug && !skipped_it)
 		recompute_speed(machine, current_time);
 
 	/* call the end-of-frame callback */
 	if (phase == MACHINE_PHASE_RUNNING)
 	{
 		/* reset partial updates if we're paused or if the debugger is active */
-		if (machine->primary_screen != NULL && (machine->paused() || debug))
+		if (machine->primary_screen != NULL && (machine->paused() || debug || debugger_within_instruction_hook(machine)))
 			machine->primary_screen->scanline0_callback();
+
 		/* otherwise, call the video EOF callback */
 		else
-			machine->driver_data<driver_data_t>()->video_eof();
+		{
+			g_profiler.start(PROFILER_VIDEO);
+			machine->driver_data<driver_device>()->video_eof();
+			g_profiler.stop();
+		}
 	}
 }
 
@@ -436,7 +469,7 @@ void video_frame_update(running_machine *machine, int debug)
 
 static int finish_screen_updates(running_machine *machine)
 {
-	int anything_changed = 0;
+	bool anything_changed = false;
 
 	/* finish updating the screens */
 	for (screen_device *screen = screen_first(*machine); screen != NULL; screen = screen_next(screen))
@@ -445,19 +478,22 @@ static int finish_screen_updates(running_machine *machine)
 	/* now add the quads for all the screens */
 	for (screen_device *screen = screen_first(*machine); screen != NULL; screen = screen_next(screen))
 		if (screen->update_quads())
-			anything_changed = 1;
+			anything_changed = true;
 
 	/* update our movie recording and burn-in state */
 	if (!machine->paused())
 	{
+		video_mng_record_frame(machine);
+		video_avi_record_frame(machine);
+
 		/* iterate over screens and update the burnin for the ones that care */
 		for (screen_device *screen = screen_first(*machine); screen != NULL; screen = screen_next(screen))
 			screen->update_burnin();
 	}
 
 	/* draw any crosshairs */
-/*	for (screen_device *screen = screen_first(*machine); screen != NULL; screen = screen_next(screen))
-		crosshair_render(*screen);	*/
+	for (screen_device *screen = screen_first(*machine); screen != NULL; screen = screen_next(screen))
+		crosshair_render(*screen);
 
 	return anything_changed;
 }
@@ -465,7 +501,7 @@ static int finish_screen_updates(running_machine *machine)
 
 
 /***************************************************************************
-	THROTTLING/FRAMESKIPPING/PERFORMANCE
+    THROTTLING/FRAMESKIPPING/PERFORMANCE
 ***************************************************************************/
 
 /*-------------------------------------------------
@@ -518,12 +554,15 @@ const char *video_get_speed_text(running_machine *machine)
 	/* if we're paused, just display Paused */
 	if (paused)
 		dest += sprintf(dest, "paused");
+
 	/* if we're fast forwarding, just display Fast-forward */
 	else if (global.fastforward)
 		dest += sprintf(dest, "fast ");
+
 	/* if we're auto frameskipping, display that plus the level */
 	else if (effective_autoframeskip(machine))
 		dest += sprintf(dest, "auto%2d/%d", effective_frameskip(), MAX_FRAMESKIP);
+
 	/* otherwise, just display the frameskip plus the level */
 	else
 		dest += sprintf(dest, "skip %d/%d", effective_frameskip(), MAX_FRAMESKIP);
@@ -562,6 +601,7 @@ int video_get_frameskip(void)
 	/* if autoframeskip is on, return -1 */
 	if (global.auto_frameskip)
 		return -1;
+
 	/* otherwise, return the direct level */
 	else
 		return global.frameskip_level;
@@ -642,36 +682,39 @@ void video_set_fastforward(int _fastforward)
 
 static void update_throttle(running_machine *machine, attotime emutime)
 {
-/*	Throttling theory:
+/*
 
-	This routine is called periodically with an up-to-date emulated time.
-	The idea is to synchronize real time with emulated time. We do this
-	by "throttling", or waiting for real time to catch up with emulated
-	time.
+   Throttling theory:
 
-	In an ideal world, it will take less real time to emulate and render
-	each frame than the emulated time, so we need to slow things down to
-	get both times in sync.
+   This routine is called periodically with an up-to-date emulated time.
+   The idea is to synchronize real time with emulated time. We do this
+   by "throttling", or waiting for real time to catch up with emulated
+   time.
 
-	There are many complications to this model:
+   In an ideal world, it will take less real time to emulate and render
+   each frame than the emulated time, so we need to slow things down to
+   get both times in sync.
 
-	* some games run too slow, so each frame we get further and
-          further behind real time; our only choice here is to not
-          throttle
+   There are many complications to this model:
 
-	* some games have very uneven frame rates; one frame will take
-          a long time to emulate, and the next frame may be very fast
+       * some games run too slow, so each frame we get further and
+           further behind real time; our only choice here is to not
+           throttle
 
-	* we run on top of multitasking OSes; sometimes execution time
-          is taken away from us, and this means we may not get enough
-          time to emulate one frame
+       * some games have very uneven frame rates; one frame will take
+           a long time to emulate, and the next frame may be very fast
 
-	* we may be paused, and emulated time may not be marching
-          forward
+       * we run on top of multitasking OSes; sometimes execution time
+           is taken away from us, and this means we may not get enough
+           time to emulate one frame
 
-	* emulated time could jump due to resetting the machine or
-          restoring from a saved state	*/
+       * we may be paused, and emulated time may not be marching
+           forward
 
+       * emulated time could jump due to resetting the machine or
+           restoring from a saved state
+
+*/
 	static const UINT8 popcount[256] =
 	{
 		0,1,1,2,1,2,2,3, 1,2,2,3,2,3,3,4, 1,2,2,3,2,3,3,4, 2,3,3,4,3,4,4,5,
@@ -687,7 +730,6 @@ static void update_throttle(running_machine *machine, attotime emutime)
 	attoseconds_t emu_delta_attoseconds;
 	attoseconds_t real_is_ahead_attoseconds;
 	attoseconds_t attoseconds_per_tick;
-
 	osd_ticks_t ticks_per_second;
 	osd_ticks_t target_ticks;
 	osd_ticks_t diff_ticks;
@@ -704,10 +746,10 @@ static void update_throttle(running_machine *machine, attotime emutime)
 	attoseconds_per_tick = ATTOSECONDS_PER_SECOND / ticks_per_second;
 
 	/* if we're paused, emutime will not advance; instead, we subtract a fixed
-	   amount of time (1/60th of a second) from the emulated time that was passed in,
-	   and explicitly reset our tracked real and emulated timers to that value ...
-	   this means we pretend that the last update was exactly 1/60th of a second
-	   ago, and was in sync in both real and emulated time	*/
+       amount of time (1/60th of a second) from the emulated time that was passed in,
+       and explicitly reset our tracked real and emulated timers to that value ...
+       this means we pretend that the last update was exactly 1/60th of a second
+       ago, and was in sync in both real and emulated time */
 	if (machine->paused())
 	{
 		global.throttle_emutime = attotime_sub_attoseconds(emutime, ATTOSECONDS_PER_SECOND / PAUSED_REFRESH_RATE);
@@ -715,24 +757,31 @@ static void update_throttle(running_machine *machine, attotime emutime)
 	}
 
 	/* attempt to detect anomalies in the emulated time by subtracting the previously
-	   reported value from our current value; this should be a small value somewhere
-	   between 0 and 1/10th of a second ... anything outside of this range is obviously
-	   wrong and requires a resync	*/
+       reported value from our current value; this should be a small value somewhere
+       between 0 and 1/10th of a second ... anything outside of this range is obviously
+       wrong and requires a resync */
 	emu_delta_attoseconds = attotime_to_attoseconds(attotime_sub(emutime, global.throttle_emutime));
-
 	if (emu_delta_attoseconds < 0 || emu_delta_attoseconds > ATTOSECONDS_PER_SECOND / 10)
+	{
+		if (LOG_THROTTLE)
+			logerror("Resync due to weird emutime delta: %s\n", attotime_string(attotime_make(0, emu_delta_attoseconds), 18));
 		goto resync;
+	}
 
 	/* now determine the current real time in OSD-specified ticks; we have to be careful
-	   here because counters can wrap, so we only use the difference between the last
-	   read value and the current value in our computations		*/
+       here because counters can wrap, so we only use the difference between the last
+       read value and the current value in our computations */
 	diff_ticks = osd_ticks() - global.throttle_last_ticks;
 	global.throttle_last_ticks += diff_ticks;
 
 	/* if it has been more than a full second of real time since the last call to this
-	   function, we just need to resynchronize */
+       function, we just need to resynchronize */
 	if (diff_ticks >= ticks_per_second)
+	{
+		if (LOG_THROTTLE)
+			logerror("Resync due to real time advancing by more than 1 second\n");
 		goto resync;
+	}
 
 	/* convert this value into attoseconds for easier comparison */
 	real_delta_attoseconds = diff_ticks * attoseconds_per_tick;
@@ -742,19 +791,23 @@ static void update_throttle(running_machine *machine, attotime emutime)
 	global.throttle_realtime = attotime_add_attoseconds(global.throttle_realtime, real_delta_attoseconds);
 
 	/* keep a history of whether or not emulated time beat real time over the last few
-	   updates; this can be used for future heuristics	*/
+       updates; this can be used for future heuristics */
 	global.throttle_history = (global.throttle_history << 1) | (emu_delta_attoseconds > real_delta_attoseconds);
 
 	/* determine how far ahead real time is versus emulated time; note that we use the
-	   accumulated times for this instead of the deltas for the current update because
-	   we want to track time over a longer duration than a single update	*/
+       accumulated times for this instead of the deltas for the current update because
+       we want to track time over a longer duration than a single update */
 	real_is_ahead_attoseconds = attotime_to_attoseconds(attotime_sub(global.throttle_emutime, global.throttle_realtime));
 
 	/* if we're more than 1/10th of a second out, or if we are behind at all and emulation
-	   is taking longer than the real frame, we just need to resync */
+       is taking longer than the real frame, we just need to resync */
 	if (real_is_ahead_attoseconds < -ATTOSECONDS_PER_SECOND / 10 ||
 		(real_is_ahead_attoseconds < 0 && popcount[global.throttle_history & 0xff] < 6))
+	{
+		if (LOG_THROTTLE)
+			logerror("Resync due to being behind: %s (history=%08X)\n", attotime_string(attotime_make(0, -real_is_ahead_attoseconds), 18), global.throttle_history);
 		goto resync;
+	}
 
 	/* if we're behind, it's time to just get out */
 	if (real_is_ahead_attoseconds < 0)
@@ -767,8 +820,8 @@ static void update_throttle(running_machine *machine, attotime emutime)
 	diff_ticks = throttle_until_ticks(machine, target_ticks) - global.throttle_last_ticks;
 	global.throttle_last_ticks += diff_ticks;
 	global.throttle_realtime = attotime_add_attoseconds(global.throttle_realtime, diff_ticks * attoseconds_per_tick);
-
 	return;
+
 resync:
 	/* reset realtime and emutime to the same value */
 	global.throttle_realtime = global.throttle_emutime = emutime;
@@ -789,15 +842,14 @@ static osd_ticks_t throttle_until_ticks(running_machine *machine, osd_ticks_t ta
 	int allowed_to_sleep = FALSE;
 
 	/* we're allowed to sleep via the OSD code only if we're configured to do so
-	   and we're not frameskipping due to autoframeskip, or if we're paused	*/
-	if ( options_get_bool(machine->options(), OPTION_SLEEP ) )
-		if ( !effective_autoframeskip(machine) || effective_frameskip() == 0 )
-			allowed_to_sleep = TRUE;
-
-	if ( machine->paused() )
-		allowed_to_sleep = TRUE;
+       and we're not frameskipping due to autoframeskip, or if we're paused */
+    if (options_get_bool(machine->options(), OPTION_SLEEP) && (!effective_autoframeskip(machine) || effective_frameskip() == 0))
+    	allowed_to_sleep = TRUE;
+    if (machine->paused())
+    	allowed_to_sleep = TRUE;
 
 	/* loop until we reach our target */
+	g_profiler.start(PROFILER_IDLE);
 	while (current_ticks < target_ticks)
 	{
 		osd_ticks_t delta;
@@ -828,10 +880,14 @@ static osd_ticks_t throttle_until_ticks(running_machine *machine, osd_ticks_t ta
 
 				/* take 90% of the previous average plus 10% of the new value */
 				global.average_oversleep = (global.average_oversleep * 99 + oversleep_milliticks) / 100;
+
+				if (LOG_THROTTLE)
+					logerror("Slept for %d ticks, got %d ticks, avgover = %d\n", (int)delta, (int)actual_ticks, (int)global.average_oversleep);
 			}
 		}
 		current_ticks = new_ticks;
 	}
+	g_profiler.stop();
 
 	return current_ticks;
 }
@@ -845,43 +901,43 @@ static osd_ticks_t throttle_until_ticks(running_machine *machine, osd_ticks_t ta
 static void update_frameskip(running_machine *machine)
 {
 	/* if we're throttling and autoframeskip is on, adjust */
-	if (effective_throttle(machine))
+	if (effective_throttle(machine) && effective_autoframeskip(machine) && global.frameskip_counter == 0)
 	{
-		if (effective_autoframeskip(machine) && global.frameskip_counter == 0)
+		double speed = global.speed * 0.01;
+
+		/* if we're too fast, attempt to increase the frameskip */
+		if (global.speed_percent >= 0.995 * speed)
 		{
-			double speed = global.speed * 0.01;
-			/* if we're too fast, attempt to increase the frameskip */
-			if (global.speed_percent >= 0.995 * speed)
+			/* but only after 3 consecutive frames where we are too fast */
+			if (++global.frameskip_adjust >= 3)
 			{
-				/* but only after 3 consecutive frames where we are too fast */
-				if (++global.frameskip_adjust >= 3)
-				{
-					global.frameskip_adjust = 0;
-
-					if (global.frameskip_level > 0)
-						global.frameskip_level--;
-				}
+				global.frameskip_adjust = 0;
+				if (global.frameskip_level > 0)
+					global.frameskip_level--;
 			}
-			/* if we're too slow, attempt to increase the frameskip */
-			else
-			{
-				/* if below 80% speed, be more aggressive */
-				if (global.speed_percent < 0.80 * speed)
-					global.frameskip_adjust -= (0.90 * speed - global.speed_percent) / 0.05;
-				/* if we're close, only force it up to frameskip 8 */
-				else if (global.frameskip_level < 8)
-					global.frameskip_adjust--;
+		}
 
-				/* perform the adjustment */
-				while (global.frameskip_adjust <= -2)
-				{
-					global.frameskip_adjust += 2;
-					if (global.frameskip_level < MAX_FRAMESKIP)
-						global.frameskip_level++;
-				}
+		/* if we're too slow, attempt to increase the frameskip */
+		else
+		{
+			/* if below 80% speed, be more aggressive */
+			if (global.speed_percent < 0.80 *  speed)
+				global.frameskip_adjust -= (0.90 * speed - global.speed_percent) / 0.05;
+
+			/* if we're close, only force it up to frameskip 8 */
+			else if (global.frameskip_level < 8)
+				global.frameskip_adjust--;
+
+			/* perform the adjustment */
+			while (global.frameskip_adjust <= -2)
+			{
+				global.frameskip_adjust += 2;
+				if (global.frameskip_level < MAX_FRAMESKIP)
+					global.frameskip_level++;
 			}
 		}
 	}
+
 	/* increment the frameskip counter and determine if we will skip the next frame */
 	global.frameskip_counter = (global.frameskip_counter + 1) % FRAMESKIP_LEVELS;
 	global.skipping_this_frame = skiptable[effective_frameskip()][global.frameskip_counter];
@@ -898,11 +954,12 @@ static void update_refresh_speed(running_machine *machine)
 	/* only do this if the refreshspeed option is used */
 	if (options_get_bool(machine->options(), OPTION_REFRESHSPEED))
 	{
-		float minrefresh = render_get_max_update_rate();
-
+		float minrefresh = machine->render().max_update_rate();
 		if (minrefresh != 0)
 		{
 			attoseconds_t min_frame_period = ATTOSECONDS_PER_SECOND;
+			UINT32 original_speed = original_speed_setting();
+			UINT32 target_speed;
 
 			/* find the screen with the shortest frame period (max refresh rate) */
 			/* note that we first check the token since this can get called before all screens are created */
@@ -915,18 +972,14 @@ static void update_refresh_speed(running_machine *machine)
 
 			/* compute a target speed as an integral percentage */
 			/* note that we lop 0.25Hz off of the minrefresh when doing the computation to allow for
-			   the fact that most refresh rates are not accurate to 10 digits...	*/
-			UINT32 original_speed = original_speed_setting();
-			UINT32 target_speed;
-
+               the fact that most refresh rates are not accurate to 10 digits... */
 			target_speed = floor((minrefresh - 0.25f) * 100.0 / ATTOSECONDS_TO_HZ(min_frame_period));
 			target_speed = MIN(target_speed, original_speed);
 
 			/* if we changed, log that verbosely */
 			if (target_speed != global.speed)
 			{
-				mame_printf_verbose("Adjusting target speed to %d%% (hw=%.2fHz, game=%.2fHz, adjusted=%.2fHz)\n", 
-					target_speed, minrefresh, ATTOSECONDS_TO_HZ(min_frame_period), ATTOSECONDS_TO_HZ(min_frame_period * 100 / target_speed));
+				mame_printf_verbose("Adjusting target speed to %d%% (hw=%.2fHz, game=%.2fHz, adjusted=%.2fHz)\n", target_speed, minrefresh, ATTOSECONDS_TO_HZ(min_frame_period), ATTOSECONDS_TO_HZ(min_frame_period * 100 / target_speed));
 				global.speed = target_speed;
 			}
 		}
@@ -953,7 +1006,6 @@ static void recompute_speed(running_machine *machine, attotime emutime)
 
 	/* if it has been more than the update interval, update the time */
 	delta_emutime = attotime_to_attoseconds(attotime_sub(emutime, global.speed_last_emutime));
-
 	if (delta_emutime > SUBSECONDS_PER_SPEED_UPDATE)
 	{
 		osd_ticks_t realtime = osd_ticks();
@@ -977,7 +1029,6 @@ static void recompute_speed(running_machine *machine, attotime emutime)
 		if (global.overall_valid_counter >= 4)
 		{
 			global.overall_real_ticks += delta_realtime;
-
 			while (global.overall_real_ticks >= tps)
 			{
 				global.overall_real_ticks -= tps;
@@ -990,23 +1041,21 @@ static void recompute_speed(running_machine *machine, attotime emutime)
 	/* if we're past the "time-to-execute" requested, signal an exit */
 	if (global.seconds_to_run != 0 && emutime.seconds >= global.seconds_to_run)
 	{
-		if (allow_create_screenshot)
+		if (machine->primary_screen != NULL)
 		{
-			if (machine->primary_screen != NULL)
-			{
-				astring fname(machine->basename(), PATH_SEPARATOR "final.png");
-				file_error filerr;
-				mame_file *file;
+			astring fname(machine->basename(), PATH_SEPARATOR "final.png");
+			file_error filerr;
+			mame_file *file;
 
-				/* create a final screenshot */
-				filerr = mame_fopen(SEARCHPATH_SCREENSHOT, fname, OPEN_FLAG_WRITE | OPEN_FLAG_CREATE | OPEN_FLAG_CREATE_PATHS, &file);
-				if (filerr == FILERR_NONE)
-				{
-					screen_save_snapshot(machine, machine->primary_screen, file);
-					mame_fclose(file);
-				}
+			/* create a final screenshot */
+			filerr = mame_fopen(SEARCHPATH_SCREENSHOT, fname, OPEN_FLAG_WRITE | OPEN_FLAG_CREATE | OPEN_FLAG_CREATE_PATHS, &file);
+			if (filerr == FILERR_NONE)
+			{
+				screen_save_snapshot(machine, machine->primary_screen, file);
+				mame_fclose(file);
 			}
 		}
+
 		/* schedule our demise */
 		machine->schedule_exit();
 	}
@@ -1046,8 +1095,6 @@ void screen_save_snapshot(running_machine *machine, device_t *screen, mame_file 
 	/* now do the actual work */
 	palette = (machine->palette != NULL) ? palette_entry_list_adjusted(machine->palette) : NULL;
 	error = png_write_bitmap(mame_core_file(fp), &pnginfo, global.snap_bitmap, machine->total_colors(), palette);
-//	printf("png error: %x\n", error);
-	if (error) ;
 
 	/* free any data allocated */
 	png_free(&pnginfo);
@@ -1068,33 +1115,29 @@ void video_save_active_screen_snapshots(running_machine *machine)
 	assert(machine->config != NULL);
 
 	/* if we're native, then write one snapshot per visible screen */
-	if (allow_create_screenshot)
+	if (global.snap_native)
 	{
-		if (global.snap_native)
-		{
-			/* write one snapshot per visible screen */
-			for (screen_device *screen = screen_first(*machine); screen != NULL; screen = screen_next(screen))
+		/* write one snapshot per visible screen */
+		for (screen_device *screen = screen_first(*machine); screen != NULL; screen = screen_next(screen))
+			if (machine->render().is_live(*screen))
 			{
-				if (render_is_live_screen(screen))
+				file_error filerr = mame_fopen_next(machine, SEARCHPATH_SCREENSHOT, "png", &fp);
+				if (filerr == FILERR_NONE)
 				{
-					file_error filerr = mame_fopen_next(machine, SEARCHPATH_SCREENSHOT, "png", &fp);
-					if (filerr == FILERR_NONE)
-					{
-						screen_save_snapshot(machine, screen, fp);
-						mame_fclose(fp);
-					}
+					screen_save_snapshot(machine, screen, fp);
+					mame_fclose(fp);
 				}
 			}
-		}
-		/* otherwise, just write a single snapshot */
-		else
+	}
+
+	/* otherwise, just write a single snapshot */
+	else
+	{
+		file_error filerr = mame_fopen_next(machine, SEARCHPATH_SCREENSHOT, "png", &fp);
+		if (filerr == FILERR_NONE)
 		{
-			file_error filerr = mame_fopen_next(machine, SEARCHPATH_SCREENSHOT, "png", &fp);
-			if (filerr == FILERR_NONE)
-			{
-				screen_save_snapshot(machine, NULL, fp);
-				mame_fclose(fp);
-			}
+			screen_save_snapshot(machine, NULL, fp);
+			mame_fclose(fp);
 		}
 	}
 }
@@ -1108,40 +1151,38 @@ void video_save_active_screen_snapshots(running_machine *machine)
 
 static void create_snapshot_bitmap(device_t *screen)
 {
-	const render_primitive_list *primlist;
+	INT32 width, height;
+	int view_index;
 
 	/* select the appropriate view in our dummy target */
 	if (global.snap_native && screen != NULL)
 	{
-		INT32 view_index = screen->machine->m_devicelist.index(SCREEN, screen->tag());
+		view_index = screen->machine->m_devicelist.index(SCREEN, screen->tag());
 		assert(view_index != -1);
-		render_target_set_view(global.snap_target, view_index);
+		global.snap_target->set_view(view_index);
 	}
 
 	/* get the minimum width/height and set it on the target */
-	INT32 width = global.snap_width;
-	INT32 height = global.snap_height;
-
+	width = global.snap_width;
+	height = global.snap_height;
 	if (width == 0 || height == 0)
-		render_target_get_minimum_size(global.snap_target, &width, &height);
-
-	render_target_set_bounds(global.snap_target, width, height, 0);
+		global.snap_target->compute_minimum_size(width, height);
+	global.snap_target->set_bounds(width, height);
 
 	/* if we don't have a bitmap, or if it's not the right size, allocate a new one */
 	if (global.snap_bitmap == NULL || width != global.snap_bitmap->width || height != global.snap_bitmap->height)
 	{
 		if (global.snap_bitmap != NULL)
 			global_free(global.snap_bitmap);
-
 		global.snap_bitmap = global_alloc(bitmap_t(width, height, BITMAP_FORMAT_RGB32));
 		assert(global.snap_bitmap != NULL);
 	}
 
 	/* render the screen there */
-	primlist = render_target_get_primitives(global.snap_target);
-	osd_lock_acquire(primlist->lock);
-/*	rgb888_draw_primitives(primlist->head, global.snap_bitmap->base, width, height, global.snap_bitmap->rowpixels); */
-	osd_lock_release(primlist->lock);
+	render_primitive_list &primlist = global.snap_target->get_primitives();
+	primlist.acquire_lock();
+//	rgb888_draw_primitives(primlist, global.snap_bitmap->base, width, height, global.snap_bitmap->rowpixels);
+	primlist.release_lock();
 }
 
 
@@ -1151,10 +1192,6 @@ static void create_snapshot_bitmap(device_t *screen)
     numbering scheme
 -------------------------------------------------*/
 
-#if defined(__GNUC__) && (__GNUC__ >= 6)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wformat-overflow="
-#endif
 static file_error mame_fopen_next(running_machine *machine, const char *pathoption, const char *extension, mame_file **file)
 {
 	const char *snapname = options_get_string(machine->options(), OPTION_SNAPNAME);
@@ -1180,12 +1217,15 @@ static file_error mame_fopen_next(running_machine *machine, const char *pathopti
 
 	/* determine if the template has an index; if not, we always use the same name */
 	if (snapstr.find(0, "%i") == -1)
-		snapstr.cpy(snapstr);
+		fname.cpy(snapstr);
+
 	/* otherwise, we scan for the next available filename */
 	else
 	{
+		int seq;
+
 		/* try until we succeed */
-		for (int seq = 0; ; seq++)
+		for (seq = 0; ; seq++)
 		{
 			char seqtext[10];
 
@@ -1204,14 +1244,13 @@ static file_error mame_fopen_next(running_machine *machine, const char *pathopti
 	}
 
 	/* create the final file */
-	return mame_fopen(pathoption, fname, OPEN_FLAG_WRITE | OPEN_FLAG_CREATE | OPEN_FLAG_CREATE_PATHS, file);
+    return mame_fopen(pathoption, fname, OPEN_FLAG_WRITE | OPEN_FLAG_CREATE | OPEN_FLAG_CREATE_PATHS, file);
 }
-#if defined(__GNUC__) && (__GNUC__ >= 6)
-#pragma GCC diagnostic pop
-#endif
+
+
 
 /***************************************************************************
-	MNG MOVIE RECORDING
+    MNG MOVIE RECORDING
 ***************************************************************************/
 
 /*-------------------------------------------------
@@ -1248,8 +1287,6 @@ void video_mng_begin_recording(running_machine *machine, const char *name)
 		filerr = mame_fopen(SEARCHPATH_MOVIE, name, OPEN_FLAG_WRITE | OPEN_FLAG_CREATE | OPEN_FLAG_CREATE_PATHS, &global.mngfile);
 	else
 		filerr = mame_fopen_next(machine, SEARCHPATH_MOVIE, "mng", &global.mngfile);
-
-	if (filerr) ;
 
 	/* start the capture */
 	rate = (machine->primary_screen != NULL) ? ATTOSECONDS_TO_HZ(machine->primary_screen->frame_period().attoseconds) : screen_device::k_default_frame_rate;
@@ -1289,7 +1326,7 @@ void video_mng_end_recording(running_machine *machine)
     video_mng_record_frame - record a frame of a
     movie
 -------------------------------------------------*/
-#if 0
+
 static void video_mng_record_frame(running_machine *machine)
 {
 	/* only record if we have a file */
@@ -1298,6 +1335,8 @@ static void video_mng_record_frame(running_machine *machine)
 		attotime curtime = timer_get_time(machine);
 		png_info pnginfo = { 0 };
 		png_error error;
+
+		g_profiler.start(PROFILER_MOVIE_REC);
 
 		/* create the bitmap */
 		create_snapshot_bitmap(NULL);
@@ -1332,9 +1371,11 @@ static void video_mng_record_frame(running_machine *machine)
 			global.movie_next_frame_time = attotime_add(global.movie_next_frame_time, global.movie_frame_period);
 			global.movie_frame++;
 		}
+
+		g_profiler.stop();
 	}
 }
-#endif
+
 
 
 /***************************************************************************
@@ -1397,7 +1438,6 @@ void video_avi_begin_recording(running_machine *machine, const char *name)
 		/* create the file and free the string */
 		avierr = avi_create(fullname, &info, &global.avifile);
 	}
-	if (avierr) ;
 }
 
 
@@ -1422,7 +1462,7 @@ void video_avi_end_recording(running_machine *machine)
     video_avi_record_frame - record a frame of a
     movie
 -------------------------------------------------*/
-#if 0
+
 static void video_avi_record_frame(running_machine *machine)
 {
 	/* only record if we have a file */
@@ -1430,6 +1470,8 @@ static void video_avi_record_frame(running_machine *machine)
 	{
 		attotime curtime = timer_get_time(machine);
 		avi_error avierr;
+
+		g_profiler.start(PROFILER_MOVIE_REC);
 
 		/* create the bitmap */
 		create_snapshot_bitmap(NULL);
@@ -1449,9 +1491,11 @@ static void video_avi_record_frame(running_machine *machine)
 			global.movie_next_frame_time = attotime_add(global.movie_next_frame_time, global.movie_frame_period);
 			global.movie_frame++;
 		}
+
+		g_profiler.stop();
 	}
 }
-#endif
+
 
 /*-------------------------------------------------
     video_avi_add_sound - add sound to an AVI
@@ -1465,24 +1509,28 @@ void video_avi_add_sound(running_machine *machine, const INT16 *sound, int numsa
 	{
 		avi_error avierr;
 
+		g_profiler.start(PROFILER_MOVIE_REC);
+
 		/* write the next frame */
 		avierr = avi_append_sound_samples(global.avifile, 0, sound + 0, numsamples, 1);
 		if (avierr == AVIERR_NONE)
 			avierr = avi_append_sound_samples(global.avifile, 1, sound + 1, numsamples, 1);
 		if (avierr != AVIERR_NONE)
 			video_avi_end_recording(machine);
+
+		g_profiler.stop();
 	}
 }
 
 
 
 /***************************************************************************
-	BURN-IN GENERATION
+    BURN-IN GENERATION
 ***************************************************************************/
 
 
 /***************************************************************************
-	CONFIGURATION HELPERS
+    CONFIGURATION HELPERS
 ***************************************************************************/
 
 /*-------------------------------------------------
@@ -1492,7 +1540,7 @@ void video_avi_add_sound(running_machine *machine, const INT16 *sound, int numsa
 
 int video_get_view_for_target(running_machine *machine, render_target *target, const char *viewname, int targetindex, int numtargets)
 {
-	INT32 viewindex = -1;
+	int viewindex = -1;
 
 	/* auto view just selects the nth view */
 	if (strcmp(viewname, "auto") != 0)
@@ -1500,7 +1548,7 @@ int video_get_view_for_target(running_machine *machine, render_target *target, c
 		/* scan for a matching view name */
 		for (viewindex = 0; ; viewindex++)
 		{
-			const char *name = render_target_get_view_name(target, viewindex);
+			const char *name = target->view_name(viewindex);
 
 			/* stop scanning when we hit NULL */
 			if (name == NULL)
@@ -1514,20 +1562,25 @@ int video_get_view_for_target(running_machine *machine, render_target *target, c
 	}
 
 	/* if we don't have a match, default to the nth view */
-	if (viewindex == -1)
+	int scrcount = screen_count(*machine->config);
+	if (viewindex == -1 && scrcount > 0)
 	{
-		int scrcount = screen_count(*machine->config);
-
 		/* if we have enough targets to be one per screen, assign in order */
 		if (numtargets >= scrcount)
 		{
+			int index = target->index() % scrcount;
+			screen_device *screen;
+			for (screen = screen_first(*machine); screen != NULL; screen = screen_next(screen))
+				if (index-- == 0)
+					break;
+
 			/* find the first view with this screen and this screen only */
 			for (viewindex = 0; ; viewindex++)
 			{
-				UINT32 viewscreens = render_target_get_view_screens(target, viewindex);
-				if (viewscreens == (1 << targetindex))
+				const render_screen_list &viewscreens = target->view_screens(viewindex);
+				if (viewscreens.count() == 1 && viewscreens.contains(*screen))
 					break;
-				if (viewscreens == 0)
+				if (viewscreens.count() == 0)
 				{
 					viewindex = -1;
 					break;
@@ -1540,17 +1593,24 @@ int video_get_view_for_target(running_machine *machine, render_target *target, c
 		{
 			for (viewindex = 0; ; viewindex++)
 			{
-				UINT32 viewscreens = render_target_get_view_screens(target, viewindex);
-				if (viewscreens == (1 << scrcount) - 1)
+				const render_screen_list &viewscreens = target->view_screens(viewindex);
+				if (viewscreens.count() == 0)
 					break;
-				if (viewscreens == 0)
-					break;
+				if (viewscreens.count() >= scrcount)
+				{
+					screen_device *screen;
+					for (screen = screen_first(*machine); screen != NULL; screen = screen_next(screen))
+						if (!viewscreens.contains(*screen))
+							break;
+						if (screen == NULL)
+							break;
+				}
 			}
 		}
 	}
 
 	/* make sure it's a valid view */
-	if (render_target_get_view_name(target, viewindex) == NULL)
+	if (target->view_name(viewindex) == NULL)
 		viewindex = 0;
 
 	return viewindex;
@@ -1559,7 +1619,7 @@ int video_get_view_for_target(running_machine *machine, render_target *target, c
 
 
 /***************************************************************************
-	DEBUGGING HELPERS
+    DEBUGGING HELPERS
 ***************************************************************************/
 
 /*-------------------------------------------------
@@ -1591,7 +1651,7 @@ void video_assert_out_of_range_pixels(running_machine *machine, bitmap_t *bitmap
 
 
 //*************************************************************************/
-//	VIDEO SCREEN DEVICE CONFIGURATION
+//  VIDEO SCREEN DEVICE CONFIGURATION
 //*************************************************************************/
 
 const attotime screen_device::k_default_frame_period = STATIC_ATTOTIME_IN_HZ(k_default_frame_rate);
@@ -1640,29 +1700,114 @@ device_t *screen_device_config::alloc_device(running_machine &machine) const
 
 
 //-------------------------------------------------
-//  device_config_complete - perform any
-//  operations now that the configuration is
-//  complete
+//  static_set_format - configuration helper
+//  to set the bitmap format
 //-------------------------------------------------
 
-void screen_device_config::device_config_complete()
+void screen_device_config::static_set_format(device_config *device, bitmap_format format)
 {
-	// move inline data into its final home
-	m_type = static_cast<screen_type_enum>(m_inline_data[INLINE_TYPE]);
-	m_width = static_cast<INT16>(m_inline_data[INLINE_WIDTH]);
-	m_height = static_cast<INT16>(m_inline_data[INLINE_HEIGHT]);
-	m_visarea.min_x = static_cast<INT16>(m_inline_data[INLINE_VIS_MINX]);
-	m_visarea.min_y = static_cast<INT16>(m_inline_data[INLINE_VIS_MINY]);
-	m_visarea.max_x = static_cast<INT16>(m_inline_data[INLINE_VIS_MAXX]);
-	m_visarea.max_y = static_cast<INT16>(m_inline_data[INLINE_VIS_MAXY]);
-	m_oldstyle_vblank_supplied = (m_inline_data[INLINE_OLDVBLANK] != 0);
-	m_refresh = m_inline_data[INLINE_REFRESH];
-	m_vblank = m_inline_data[INLINE_VBLANK];
-	m_format = static_cast<bitmap_format>(m_inline_data[INLINE_FORMAT]);
-	m_xoffset = static_cast<double>(static_cast<INT32>(m_inline_data[INLINE_XOFFSET])) / (double)(1 << 24);
-	m_yoffset = static_cast<double>(static_cast<INT32>(m_inline_data[INLINE_YOFFSET])) / (double)(1 << 24);
-	m_xscale = (m_inline_data[INLINE_XSCALE] == 0) ? 1.0 : (static_cast<double>(static_cast<INT32>(m_inline_data[INLINE_XSCALE])) / (double)(1 << 24));
-	m_yscale = (m_inline_data[INLINE_YSCALE] == 0) ? 1.0 : (static_cast<double>(static_cast<INT32>(m_inline_data[INLINE_YSCALE])) / (double)(1 << 24));
+	screen_device_config *screen = downcast<screen_device_config *>(device);
+	screen->m_format = format;
+}
+
+
+//-------------------------------------------------
+//  static_set_type - configuration helper
+//  to set the screen type
+//-------------------------------------------------
+
+void screen_device_config::static_set_type(device_config *device, screen_type_enum type)
+{
+	screen_device_config *screen = downcast<screen_device_config *>(device);
+	screen->m_type = type;
+}
+
+
+//-------------------------------------------------
+//  static_set_raw - configuration helper
+//  to set the raw screen parameters
+//-------------------------------------------------
+
+void screen_device_config::static_set_raw(device_config *device, UINT32 pixclock, UINT16 htotal, UINT16 hbend, UINT16 hbstart, UINT16 vtotal, UINT16 vbend, UINT16 vbstart)
+{
+	screen_device_config *screen = downcast<screen_device_config *>(device);
+	screen->m_refresh = HZ_TO_ATTOSECONDS(pixclock) * htotal * vtotal;
+	screen->m_vblank = screen->m_refresh / vtotal * (vtotal - (vbstart - vbend));
+	screen->m_width = htotal;
+	screen->m_height = vtotal;
+	screen->m_visarea.min_x = hbend;
+	screen->m_visarea.max_x = hbstart - 1;
+	screen->m_visarea.min_y = vbend;
+	screen->m_visarea.max_y = vbstart - 1;
+}
+
+
+//-------------------------------------------------
+//  static_set_refresh - configuration helper
+//  to set the refresh rate
+//-------------------------------------------------
+
+void screen_device_config::static_set_refresh(device_config *device, attoseconds_t rate)
+{
+	screen_device_config *screen = downcast<screen_device_config *>(device);
+	screen->m_refresh = rate;
+}
+
+
+//-------------------------------------------------
+//  static_set_vblank_time - configuration helper
+//  to set the VBLANK duration
+//-------------------------------------------------
+
+void screen_device_config::static_set_vblank_time(device_config *device, attoseconds_t time)
+{
+	screen_device_config *screen = downcast<screen_device_config *>(device);
+	screen->m_vblank = time;
+	screen->m_oldstyle_vblank_supplied = true;
+}
+
+
+//-------------------------------------------------
+//  static_set_size - configuration helper to set
+//  the width/height of the screen
+//-------------------------------------------------
+
+void screen_device_config::static_set_size(device_config *device, UINT16 width, UINT16 height)
+{
+	screen_device_config *screen = downcast<screen_device_config *>(device);
+	screen->m_width = width;
+	screen->m_height = height;
+}
+
+
+//-------------------------------------------------
+//  static_set_visarea - configuration helper to 
+//  set the visible area of the screen
+//-------------------------------------------------
+
+void screen_device_config::static_set_visarea(device_config *device, INT16 minx, INT16 maxx, INT16 miny, INT16 maxy)
+{
+	screen_device_config *screen = downcast<screen_device_config *>(device);
+	screen->m_visarea.min_x = minx;
+	screen->m_visarea.max_x = maxx;
+	screen->m_visarea.min_y = miny;
+	screen->m_visarea.max_y = maxy;
+}
+
+
+//-------------------------------------------------
+//  static_set_default_position - configuration 
+//  helper to set the default position and scale
+//  factors for the screen
+//-------------------------------------------------
+
+void screen_device_config::static_set_default_position(device_config *device, double xscale, double xoffs, double yscale, double yoffs)
+{
+	screen_device_config *screen = downcast<screen_device_config *>(device);
+	screen->m_xscale = xscale;
+	screen->m_xoffset = xoffs;
+	screen->m_yscale = yscale;
+	screen->m_yoffset = yoffs;
 }
 
 
@@ -1716,7 +1861,7 @@ bool screen_device_config::device_validity_check(const game_driver &driver) cons
 
 
 //*************************************************************************/
-//	LIVE VIDEO SCREEN DEVICE
+//  LIVE VIDEO SCREEN DEVICE
 //*************************************************************************/
 
 //-------------------------------------------------
@@ -1726,6 +1871,7 @@ bool screen_device_config::device_validity_check(const game_driver &driver) cons
 screen_device::screen_device(running_machine &_machine, const screen_device_config &config)
 	: device_t(_machine, config),
 	  m_config(config),
+	  m_container(NULL),
 	  m_width(m_config.m_width),
 	  m_height(m_config.m_height),
 	  m_visarea(m_config.m_visarea),
@@ -1735,6 +1881,7 @@ screen_device::screen_device(running_machine &_machine, const screen_device_conf
 	  m_texture_format(0),
 	  m_changed(true),
 	  m_last_partial_scan(0),
+	  m_screen_overlay_bitmap(NULL),
 	  m_frame_period(m_config.m_refresh),
 	  m_scantime(1),
 	  m_pixeltime(1),
@@ -1759,12 +1906,11 @@ screen_device::screen_device(running_machine &_machine, const screen_device_conf
 
 screen_device::~screen_device()
 {
-	if (m_texture[0] != NULL)
-		render_texture_free(m_texture[0]);
-	if (m_texture[1] != NULL)
-		render_texture_free(m_texture[1]);
+	m_machine.render().texture_free(m_texture[0]);
+	m_machine.render().texture_free(m_texture[1]);
 	if (m_burnin != NULL)
 		finalize_burnin();
+	global_free(m_screen_overlay_bitmap);
 }
 
 
@@ -1774,18 +1920,14 @@ screen_device::~screen_device()
 
 void screen_device::device_start()
 {
-	// get and validate that the container for this screen exists
-	render_container *container = render_container_get_screen(this);
-	assert(container != NULL);
-
 	// configure the default cliparea
-	render_container_user_settings settings;
-	render_container_get_user_settings(container, &settings);
-	settings.xoffset = m_config.m_xoffset;
-	settings.yoffset = m_config.m_yoffset;
-	settings.xscale = m_config.m_xscale;
-	settings.yscale = m_config.m_yscale;
-	render_container_set_user_settings(container, &settings);
+	render_container::user_settings settings;
+	m_container->get_user_settings(settings);
+	settings.m_xoffset = m_config.m_xoffset;
+	settings.m_yoffset = m_config.m_yoffset;
+	settings.m_xscale = m_config.m_xscale;
+	settings.m_yscale = m_config.m_yscale;
+	m_container->set_user_settings(settings);
 
 	// allocate the VBLANK timers
 	m_vblank_begin_timer = timer_alloc(machine, static_vblank_begin_callback, (void *)this);
@@ -1813,17 +1955,18 @@ void screen_device::device_start()
 	if (options_get_int(machine->options(), OPTION_BURNIN) > 0)
 	{
 		int width, height;
-
 		if (sscanf(options_get_string(machine->options(), OPTION_SNAPSIZE), "%dx%d", &width, &height) != 2 || width == 0 || height == 0)
 			width = height = 300;
-
 		m_burnin = auto_alloc(machine, bitmap_t(width, height, BITMAP_FORMAT_INDEXED64));
-
 		if (m_burnin == NULL)
 			fatalerror("Error allocating burn-in bitmap for screen at (%dx%d)\n", width, height);
-
 		bitmap_fill(m_burnin, NULL, 0);
 	}
+
+	// load the effect overlay
+	const char *overname = options_get_string(machine->options(), OPTION_EFFECT);
+	if (overname != NULL && strcmp(overname, "none") != 0)
+		load_effect_overlay(overname);
 
 	state_save_register_device_item(this, 0, m_width);
 	state_save_register_device_item(this, 0, m_height);
@@ -1885,7 +2028,7 @@ void screen_device::configure(int width, int height, const rectangle &visarea, a
 	m_pixeltime = frame_period / (height * width);
 
 	// if there has been no VBLANK time specified in the MACHINE_DRIVER, compute it now
-	// from the visible area, otherwise just used the supplied value
+    // from the visible area, otherwise just used the supplied value
 	if (m_config.m_vblank == 0 && !m_config.m_oldstyle_vblank_supplied)
 		m_vblank_period = m_scantime * (height - (visarea.max_y + 1 - visarea.min_y));
 	else
@@ -1903,6 +2046,34 @@ void screen_device::configure(int width, int height, const rectangle &visarea, a
 
 	// adjust speed if necessary
 	update_refresh_speed(machine);
+}
+
+
+//-------------------------------------------------
+//  reset_origin - reset the timing such that the
+//  given (x,y) occurs at the current time
+//-------------------------------------------------
+
+void screen_device::reset_origin(int beamy, int beamx)
+{
+	// compute the effective VBLANK start/end times
+	attotime curtime = timer_get_time(machine);
+	m_vblank_end_time = attotime_sub_attoseconds(curtime, beamy * m_scantime + beamx * m_pixeltime);
+	m_vblank_start_time = attotime_sub_attoseconds(m_vblank_end_time, m_vblank_period);
+
+	// if we are resetting relative to (0,0) == VBLANK end, call the
+	// scanline 0 timer by hand now; otherwise, adjust it for the future
+	if (beamy == 0 && beamx == 0)
+		scanline0_callback(); 
+	else
+		timer_adjust_oneshot(m_scanline0_timer, time_until_pos(0), 0);
+
+	// if we are resetting relative to (visarea.max_y + 1, 0) == VBLANK start,
+	// call the VBLANK start timer now; otherwise, adjust it for the future
+	if (beamy == m_visarea.max_y + 1 && beamx == 0)
+		vblank_begin_callback();
+	else
+		timer_adjust_oneshot(m_vblank_begin_timer, time_until_vblank_start(), 0);
 }
 
 
@@ -1929,14 +2100,10 @@ void screen_device::realloc_screen_bitmaps()
 	if (m_width > curwidth || m_height > curheight)
 	{
 		// free what we have currently
-		if (m_texture[0] != NULL)
-			render_texture_free(m_texture[0]);
-		if (m_texture[1] != NULL)
-			render_texture_free(m_texture[1]);
-		if (m_bitmap[0] != NULL)
-			auto_free(machine, m_bitmap[0]);
-		if (m_bitmap[1] != NULL)
-			auto_free(machine, m_bitmap[1]);
+		m_machine.render().texture_free(m_texture[0]);
+		m_machine.render().texture_free(m_texture[1]);
+		auto_free(machine, m_bitmap[0]);
+		auto_free(machine, m_bitmap[1]);
 
 		// compute new width/height
 		curwidth = MAX(m_width, curwidth);
@@ -1944,7 +2111,6 @@ void screen_device::realloc_screen_bitmaps()
 
 		// choose the texture format - convert the screen format to a texture format
 		palette_t *palette = NULL;
-
 		switch (m_config.m_format)
 		{
 			case BITMAP_FORMAT_INDEXED16:	m_texture_format = TEXFORMAT_PALETTE16;	palette = machine->palette; break;
@@ -1960,10 +2126,10 @@ void screen_device::realloc_screen_bitmaps()
 		bitmap_set_palette(m_bitmap[1], machine->palette);
 
 		// allocate textures
-		m_texture[0] = render_texture_alloc(NULL, NULL);
-		render_texture_set_bitmap(m_texture[0], m_bitmap[0], &m_visarea, m_texture_format, palette);
-		m_texture[1] = render_texture_alloc(NULL, NULL);
-		render_texture_set_bitmap(m_texture[1], m_bitmap[1], &m_visarea, m_texture_format, palette);
+		m_texture[0] = m_machine.render().texture_alloc();
+		m_texture[0]->set_bitmap(m_bitmap[0], &m_visarea, m_texture_format, palette);
+		m_texture[1] = m_machine.render().texture_alloc();
+		m_texture[1]->set_bitmap(m_bitmap[1], &m_visarea, m_texture_format, palette);
 	}
 }
 
@@ -2000,31 +2166,36 @@ bool screen_device::update_partial(int scanline)
 {
 	// validate arguments
 	assert(scanline >= 0);
-#if 0
+
 	LOG_PARTIAL_UPDATES(("Partial: update_partial(%s, %d): ", tag(), scanline));
-#endif
+
 	// these two checks only apply if we're allowed to skip frames
 	if (!(machine->config->m_video_attributes & VIDEO_ALWAYS_UPDATE))
 	{
 		// if skipping this frame, bail
-		/* skipped due to frameskipping */
 		if (global.skipping_this_frame)
+		{
+			LOG_PARTIAL_UPDATES(("skipped due to frameskipping\n"));
 			return FALSE;
+		}
 
 		// skip if this screen is not visible anywhere
-		/* skipped because screen not live */
-		if (!render_is_live_screen(this))
+		if (!m_machine.render().is_live(*this))
+		{
+			LOG_PARTIAL_UPDATES(("skipped because screen not live\n"));
 			return FALSE;
+		}
 	}
 
 	// skip if less than the lowest so far
-	/* skipped because less than previous */
 	if (scanline < m_last_partial_scan)
+	{
+		LOG_PARTIAL_UPDATES(("skipped because less than previous\n"));
 		return FALSE;
+	}
 
 	// set the start/end scanlines
 	rectangle clip = m_visarea;
-
 	if (m_last_partial_scan > clip.min_y)
 		clip.min_y = m_last_partial_scan;
 	if (scanline < clip.max_y)
@@ -2032,24 +2203,24 @@ bool screen_device::update_partial(int scanline)
 
 	// render if necessary
 	bool result = false;
-
 	if (clip.min_y <= clip.max_y)
 	{
 		UINT32 flags = UPDATE_HAS_NOT_CHANGED;
-#if 0
-		LOG_PARTIAL_UPDATES(("updating %d-%d\n", clip.min_y, clip.max_y));
-#endif
-		flags = machine->driver_data<driver_data_t>()->video_update(*this, *m_bitmap[m_curbitmap], clip);
 
+		g_profiler.start(PROFILER_VIDEO);
+		LOG_PARTIAL_UPDATES(("updating %d-%d\n", clip.min_y, clip.max_y));
+
+		flags = machine->driver_data<driver_device>()->video_update(*this, *m_bitmap[m_curbitmap], clip);
 		global.partial_updates_this_frame++;
+		g_profiler.stop();
 
 		// if we modified the bitmap, we have to commit
 		m_changed |= ~flags & UPDATE_HAS_NOT_CHANGED;
 		result = true;
 	}
+
 	// remember where we left off
 	m_last_partial_scan = scanline + 1;
-
 	return result;
 }
 
@@ -2065,16 +2236,15 @@ void screen_device::update_now()
 	int current_hpos = hpos();
 
 	// since we can currently update only at the scanline
-	// level, we are trying to do the right thing by
-	// updating including the current scanline, only if the
-	// beam is past the halfway point horizontally.
-	// If the beam is in the first half of the scanline,
-	// we only update up to the previous scanline.
-	// This minimizes the number of pixels that might be drawn
-	// incorrectly until we support a pixel level granularity
-	if (current_hpos < (m_width / 2))
-		if (current_vpos > 0)
-			current_vpos = current_vpos - 1;
+    // level, we are trying to do the right thing by
+    // updating including the current scanline, only if the
+    // beam is past the halfway point horizontally.
+    // If the beam is in the first half of the scanline,
+    // we only update up to the previous scanline.
+    // This minimizes the number of pixels that might be drawn
+    // incorrectly until we support a pixel level granularity
+	if (current_hpos < (m_width / 2) && current_vpos > 0)
+		current_vpos = current_vpos - 1;
 
 	update_partial(current_vpos);
 }
@@ -2088,12 +2258,13 @@ void screen_device::update_now()
 int screen_device::vpos() const
 {
 	attoseconds_t delta = attotime_to_attoseconds(attotime_sub(timer_get_time(machine), m_vblank_start_time));
+	int vpos;
 
 	// round to the nearest pixel
 	delta += m_pixeltime / 2;
 
 	// compute the v position relative to the start of VBLANK
-	int vpos = delta / m_scantime;
+	vpos = delta / m_scantime;
 
 	// adjust for the fact that VBLANK starts at the bottom of the visible area
 	return (m_visarea.max_y + 1 + vpos) % m_height;
@@ -2165,10 +2336,8 @@ attotime screen_device::time_until_vblank_end() const
 {
 	// if we are in the VBLANK region, compute the time until the end of the current VBLANK period
 	attotime target_time = m_vblank_end_time;
-
 	if (!vblank())
 		target_time = attotime_add_attoseconds(target_time, m_frame_period);
-
 	return attotime_sub(target_time, timer_get_time(machine));
 }
 
@@ -2185,7 +2354,6 @@ void screen_device::register_vblank_callback(vblank_state_changed_func vblank_ca
 
 	// check if we already have this callback registered
 	callback_item **itemptr;
-
 	for (itemptr = &m_callback_list; *itemptr != NULL; itemptr = &(*itemptr)->m_next)
 		if ((*itemptr)->m_callback == vblank_callback)
 			break;
@@ -2243,9 +2411,8 @@ void screen_device::vblank_end_callback()
 		(*item->m_callback)(*this, item->m_param, false);
 
 	// if this is the primary screen and we need to update now
-	if (machine->config->m_video_attributes & VIDEO_UPDATE_AFTER_VBLANK)
-		if (this == machine->primary_screen)
-			video_frame_update(machine, FALSE);
+	if (this == machine->primary_screen && (machine->config->m_video_attributes & VIDEO_UPDATE_AFTER_VBLANK))
+		video_frame_update(machine, FALSE);
 
 	// increment the frame number counter
 	m_frame_number++;
@@ -2281,7 +2448,6 @@ void screen_device::scanline_update_callback(int scanline)
 	scanline++;
 	if (scanline > m_visarea.max_y)
 		scanline = m_visarea.min_y;
-
 	timer_adjust_oneshot(m_scanline_timer, time_until_pos(scanline), scanline);
 }
 
@@ -2294,7 +2460,7 @@ void screen_device::scanline_update_callback(int scanline)
 bool screen_device::update_quads()
 {
 	// only update if live
-	if (render_is_live_screen(this))
+	if (m_machine.render().is_live(*this))
 	{
 		// only update if empty and not a vector game; otherwise assume the driver did it directly
 		if (m_config.m_type != SCREEN_TYPE_VECTOR && (machine->config->m_video_attributes & VIDEO_SELF_RENDER) == 0)
@@ -2307,22 +2473,21 @@ bool screen_device::update_quads()
 				fixedvis.max_y++;
 
 				palette_t *palette = (m_texture_format == TEXFORMAT_PALETTE16) ? machine->palette : NULL;
-				render_texture_set_bitmap(m_texture[m_curbitmap], m_bitmap[m_curbitmap], &fixedvis, m_texture_format, palette);
+				m_texture[m_curbitmap]->set_bitmap(m_bitmap[m_curbitmap], &fixedvis, m_texture_format, palette);
 
 				m_curtexture = m_curbitmap;
 				m_curbitmap = 1 - m_curbitmap;
 			}
 
 			// create an empty container with a single quad
-			render_container_empty(render_container_get_screen(this));
-			render_screen_add_quad(this, 0.0f, 0.0f, 1.0f, 1.0f, MAKE_ARGB(0xff,0xff,0xff,0xff), m_texture[m_curtexture], PRIMFLAG_BLENDMODE(BLENDMODE_NONE) | PRIMFLAG_SCREENTEX(1));
+			m_container->empty();
+			m_container->add_quad(0.0f, 0.0f, 1.0f, 1.0f, MAKE_ARGB(0xff,0xff,0xff,0xff), m_texture[m_curtexture], PRIMFLAG_BLENDMODE(BLENDMODE_NONE) | PRIMFLAG_SCREENTEX(1));
 		}
 	}
 
 	// reset the screen changed flags
 	bool result = m_changed;
 	m_changed = false;
-
 	return result;
 }
 
@@ -2338,7 +2503,6 @@ void screen_device::update_burnin()
 		return;
 
 	bitmap_t *srcbitmap = m_bitmap[m_curtexture];
-
 	if (srcbitmap == NULL)
 		return;
 
@@ -2358,18 +2522,8 @@ void screen_device::update_burnin()
 	{
 		UINT64 *dst = BITMAP_ADDR64(m_burnin, y, 0);
 
-		// handle the 32-bit RGB case
-		if (srcbitmap->format == BITMAP_FORMAT_RGB32)
-		{
-			const UINT32 *src = BITMAP_ADDR32(srcbitmap, srcy >> 16, 0);
-			for (x = 0, srcx = xstart; x < dstwidth; x++, srcx += xstep)
-			{
-				rgb_t pixel = src[srcx >> 16];
-				dst[x] += RGB_GREEN(pixel) + RGB_RED(pixel) + RGB_BLUE(pixel);
-			}
-		}
 		// handle the 16-bit palettized case
-		else if (srcbitmap->format == BITMAP_FORMAT_INDEXED16)
+		if (srcbitmap->format == BITMAP_FORMAT_INDEXED16)
 		{
 			const UINT16 *src = BITMAP_ADDR16(srcbitmap, srcy >> 16, 0);
 			const rgb_t *palette = palette_entry_list_adjusted(machine->palette);
@@ -2379,6 +2533,7 @@ void screen_device::update_burnin()
 				dst[x] += RGB_GREEN(pixel) + RGB_RED(pixel) + RGB_BLUE(pixel);
 			}
 		}
+
 		// handle the 15-bit RGB case
 		else if (srcbitmap->format == BITMAP_FORMAT_RGB15)
 		{
@@ -2389,13 +2544,23 @@ void screen_device::update_burnin()
 				dst[x] += ((pixel >> 10) & 0x1f) + ((pixel >> 5) & 0x1f) + ((pixel >> 0) & 0x1f);
 			}
 		}
+
+		// handle the 32-bit RGB case
+		else if (srcbitmap->format == BITMAP_FORMAT_RGB32)
+		{
+			const UINT32 *src = BITMAP_ADDR32(srcbitmap, srcy >> 16, 0);
+			for (x = 0, srcx = xstart; x < dstwidth; x++, srcx += xstep)
+			{
+				rgb_t pixel = src[srcx >> 16];
+				dst[x] += RGB_GREEN(pixel) + RGB_RED(pixel) + RGB_BLUE(pixel);
+			}
+		}
 	}
 }
 
 
 //-------------------------------------------------
-//  video_finalize_burnin - finalize the burnin
-//  bitmap
+//	finalize_burnin - finalize the burnin
 //-------------------------------------------------
 
 void screen_device::finalize_burnin()
@@ -2411,8 +2576,9 @@ void screen_device::finalize_burnin()
 	scaledvis.max_y = m_visarea.max_y * m_burnin->height / m_height;
 
 	// wrap a bitmap around the subregion we care about
-	bitmap_t *finalmap = auto_alloc(machine, bitmap_t(scaledvis.max_x + 1 - scaledvis.min_x, 
-					scaledvis.max_y + 1 - scaledvis.min_y, BITMAP_FORMAT_ARGB32));
+	bitmap_t *finalmap = auto_alloc(machine, bitmap_t(scaledvis.max_x + 1 - scaledvis.min_x,
+				                        scaledvis.max_y + 1 - scaledvis.min_y,
+				                        BITMAP_FORMAT_ARGB32));
 
 	int srcwidth = m_burnin->width;
 	int srcheight = m_burnin->height;
@@ -2420,16 +2586,14 @@ void screen_device::finalize_burnin()
 	int dstheight = finalmap->height;
 	int xstep = (srcwidth << 16) / dstwidth;
 	int ystep = (srcheight << 16) / dstheight;
-	int x, y, srcx, srcy, brightness;
 
 	// find the maximum value
 	UINT64 minval = ~(UINT64)0;
 	UINT64 maxval = 0;
-
-	for (y = 0; y < srcheight; y++)
+	for (int y = 0; y < srcheight; y++)
 	{
 		UINT64 *src = BITMAP_ADDR64(m_burnin, y, 0);
-		for (x = 0; x < srcwidth; x++)
+		for (int x = 0; x < srcwidth; x++)
 		{
 			minval = MIN(minval, src[x]);
 			maxval = MAX(maxval, src[x]);
@@ -2440,13 +2604,13 @@ void screen_device::finalize_burnin()
 		return;
 
 	// now normalize and convert to RGB
-	for (y = 0, srcy = 0; y < dstheight; y++, srcy += ystep)
+	for (int y = 0, srcy = 0; y < dstheight; y++, srcy += ystep)
 	{
 		UINT64 *src = BITMAP_ADDR64(m_burnin, srcy >> 16, 0);
 		UINT32 *dst = BITMAP_ADDR32(finalmap, y, 0);
-		for (x = 0, srcx = 0; x < dstwidth; x++, srcx += xstep)
+		for (int x = 0, srcx = 0; x < dstwidth; x++, srcx += xstep)
 		{
-			brightness = (UINT64)(maxval - src[srcx >> 16]) * 255 / (maxval - minval);
+			int brightness = (UINT64)(maxval - src[srcx >> 16]) * 255 / (maxval - minval);
 			dst[x] = MAKE_ARGB(0xff, brightness, brightness, brightness);
 		}
 	}
@@ -2456,10 +2620,8 @@ void screen_device::finalize_burnin()
 	// compute the name and create the file
 	astring fname;
 	fname.printf("%s" PATH_SEPARATOR "burnin-%s.png", machine->basename(), tag());
-
 	mame_file *file;
 	file_error filerr = mame_fopen(SEARCHPATH_SCREENSHOT, fname, OPEN_FLAG_WRITE | OPEN_FLAG_CREATE | OPEN_FLAG_CREATE_PATHS, &file);
-
 	if (filerr == FILERR_NONE)
 	{
 		png_info pnginfo = { 0 };
@@ -2474,7 +2636,6 @@ void screen_device::finalize_burnin()
 
 		// now do the actual work
 		pngerr = png_write_bitmap(mame_core_file(file), &pnginfo, finalmap, 0, NULL);
-		if (pngerr) ;
 
 		// free any data allocated
 		png_free(&pnginfo);
@@ -2483,10 +2644,32 @@ void screen_device::finalize_burnin()
 }
 
 
+//-------------------------------------------------
+//  finalize_burnin - finalize the burnin bitmap
+//-------------------------------------------------
+
+void screen_device::load_effect_overlay(const char *filename)
+{
+	// ensure that there is a .png extension
+	astring fullname(filename);
+	int extension = fullname.rchr(0, '.');
+	if (extension != -1)
+		fullname.del(extension, -1);
+	fullname.cat(".png");
+
+	// load the file
+	m_screen_overlay_bitmap = render_load_png(OPTION_ARTPATH, NULL, fullname, NULL, NULL);
+	if (m_screen_overlay_bitmap != NULL)
+		m_container->set_overlay(m_screen_overlay_bitmap);
+	else
+		mame_printf_warning("Unable to load effect PNG file '%s'\n", fullname.cstr());
+}
+
 
 //**************************************************************************
 //  SOFTWARE RENDERING
 //**************************************************************************
+
 /*
 #define FUNC_PREFIX(x)		rgb888_##x
 #define PIXEL_TYPE			UINT32
@@ -2496,8 +2679,8 @@ void screen_device::finalize_burnin()
 #define DSTSHIFT_R			16
 #define DSTSHIFT_G			8
 #define DSTSHIFT_B			0
+#define BILINEAR_FILTER		1
 
 #include "rendersw.c"
-*/
 
-const device_type SCREEN = screen_device_config::static_alloc_device_config;
+*/

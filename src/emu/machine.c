@@ -137,15 +137,15 @@ extern bool RETRO_ENDEXEC;
 //	running_machine - constructor
 //-------------------------------------------------
 
-running_machine::running_machine(const game_driver &driver, const machine_config &_config, core_options &options, bool exit_to_game_select)
+running_machine::running_machine(const machine_config &_config, core_options &options, bool exit_to_game_select)
 	:
 	m_regionlist( m_respool ),
 	m_devicelist( m_respool ),
 	config(&_config),
 	m_config(_config),
 	firstcpu(NULL),
-	gamedrv(&driver),
-	m_game(driver),
+	gamedrv(&_config.gamedrv()),
+	m_game(_config.gamedrv()),
 	primary_screen(NULL),
 	palette(NULL),
 	pens(NULL),
@@ -173,11 +173,10 @@ running_machine::running_machine(const game_driver &driver, const machine_config
 	generic_machine_data(NULL),
 	generic_video_data(NULL),
 	generic_audio_data(NULL),
-	m_debug_view(NULL),
 	m_logerror_list(NULL),
 	m_scheduler(*this),
 	m_options(options),
-	m_basename(driver.name),
+	m_basename(_config.gamedrv().name),
 	m_current_phase(MACHINE_PHASE_PREINIT),
 	m_paused(false),
 	m_hard_reset_pending(false),
@@ -190,22 +189,24 @@ running_machine::running_machine(const game_driver &driver, const machine_config
 	m_saveload_schedule_time(attotime_zero),
 	m_saveload_searchpath(NULL),
 	m_rand_seed(0x9d14abd7),
-	m_driver_data(NULL)
-
+	m_driver_device(NULL),
+	m_render(NULL),
+	m_debug_view(NULL)
 {
 	memset(gfx, 0, sizeof(gfx));
 	memset(&generic, 0, sizeof(generic));
 	memset(m_notifier_list, 0, sizeof(m_notifier_list));
 	memset(&m_base_time, 0, sizeof(m_base_time));
 
+	// find the driver device config and tell it which game
+	device_config *config = m_config.m_devicelist.find("root");
+	if (config == NULL)
+		throw emu_fatalerror("Machine configuration missing driver_device");
+
 	// attach this machine to all the devices in the configuration
 	m_devicelist.import_config_list(m_config.m_devicelist, *this);
-
-	// allocate the driver data (after devices)
-	if (m_config.m_driver_data_alloc != NULL)
-		m_driver_data = (*m_config.m_driver_data_alloc)(*this);
-	else
-		m_driver_data = auto_alloc(this, driver_data_t(*this));
+	m_driver_device = device<driver_device>("root");
+	assert(m_driver_device != NULL);
 
 	// find devices
 	primary_screen = screen_first(*this);
@@ -271,10 +272,8 @@ void running_machine::start()
 	output_init(this);
 	state_init(this);
 	state_save_allow_registration(this, true);
-	state_save_register_presave(this, pre_save_static, NULL);
-	state_save_register_postload(this, post_load_static, NULL);
 	palette_init(this);
-	render_init(this);
+	m_render = auto_alloc(this, render_manager(*this));
 	ui_init(this);
 	generic_machine_init(this);
 	generic_sound_init(this);
@@ -320,35 +319,22 @@ void running_machine::start()
 
 	// initialize image devices
 	image_init(this);
-
-	// start up the devices
-	m_devicelist.start_all();
-
-	// call the game driver's init function
-	// this is where decryption is done and memory maps are altered
-	// so this location in the init order is important
-	ui_set_startup_text(this, "Initializing...", true);
-	if (m_game.driver_init != NULL)
-		(*m_game.driver_init)(this);
-
-	// finish image devices init process
-	image_postdevice_init(this);
-
-	// start the video and audio hardware
-	video_init(this);
 	tilemap_init(this);
 	crosshair_init(this);
-
 	sound_init(this);
+	video_init(this);
 
 	// initialize the debugger
 	if ((debug_flags & DEBUG_FLAG_ENABLED) != 0)
 		debugger_init(this);
 
-	// call the driver's _START callbacks
-	m_driver_data->machine_start();
-	m_driver_data->sound_start();
-	m_driver_data->video_start();
+	// call the game driver's init function
+	// this is where decryption is done and memory maps are altered
+	// so this location in the init order is important
+	ui_set_startup_text(this, "Initializing...", true);
+
+	// start up the devices
+	m_devicelist.start_all();
 
 	// if we're coming in with a savegame request, process it now
 	const char *savegame = options_get_string(&m_options, OPTION_STATE);
@@ -456,6 +442,7 @@ void running_machine::retro_loop()
 
 	if (m_hard_reset_pending || m_exit_pending)
 	{
+printf("hard_reset_pending || exit_pending\n");
 		if (m_saveload_schedule == SLS_NONE)
 		{
 			// and out via the exit phase
@@ -489,7 +476,7 @@ void running_machine::schedule_exit()
 	if (m_exit_to_game_select && options_get_string(&m_options, OPTION_GAMENAME)[0] != 0)
 	{
 		options_set_string(&m_options, OPTION_GAMENAME, "", OPTION_PRIORITY_CMDLINE);
-		ui_menu_force_game_select(this, render_container_get_ui());
+		ui_menu_force_game_select(this, &render().ui_container());
 	}
 	// otherwise, exit for real
 	else
@@ -500,7 +487,8 @@ void running_machine::schedule_exit()
 
 	// if we're autosaving on exit, schedule a save as well
 	if (options_get_bool(&m_options, OPTION_AUTOSAVE) && (m_game.flags & GAME_SUPPORTS_SAVE))
-		schedule_save("auto");
+		if (attotime_compare(timer_get_time(this), attotime_zero) > 0)
+			schedule_save("auto");
 }
 
 
@@ -886,26 +874,6 @@ cancel:
 }
 
 //-----------------------------------------------------
-//	pre_save_static - callback to prepare for
-//	state saving
-//-----------------------------------------------------
-
-STATE_PRESAVE( running_machine::pre_save_static )
-{
-	machine->m_driver_data->pre_save();
-}
-
-//-----------------------------------------------------
-//	post_load_static - callback to update after
-//	static loading
-//-----------------------------------------------------
-
-STATE_POSTLOAD( running_machine::post_load_static )
-{
-	machine->m_driver_data->post_load();
-}
-
-//-----------------------------------------------------
 //	soft_reset - actually perform a soft-reset
 //	of the system
 //-----------------------------------------------------
@@ -924,11 +892,6 @@ void running_machine::soft_reset()
 
 	// call all registered reset callbacks
 	call_notifiers(MACHINE_NOTIFY_RESET);
-
-	// run the driver's reset callbacks
-	m_driver_data->machine_reset();
-	m_driver_data->sound_reset();
-	m_driver_data->video_reset();
 
 	// now we're running
 	m_current_phase = MACHINE_PHASE_RUNNING;
@@ -1013,150 +976,260 @@ running_machine::logerror_callback_item::logerror_callback_item(logerror_callbac
 //**************************************************************************
 
 //-------------------------------------------------
-//	driver_data_t - constructor
+//	driver_device_config_base - constructor
 //-------------------------------------------------
 
-driver_data_t::driver_data_t( running_machine &machine )
-	:
-	m_machine( machine )
+driver_device_config_base::driver_device_config_base(const machine_config &mconfig, device_type type, const char *tag, const device_config *owner)
+	: device_config(mconfig, type, "Driver Device", tag, owner, 0),
+	  m_game(NULL),
+	  m_palette_init(NULL),
+	  m_video_update(NULL)
 {
-}
-
-//-------------------------------------------------
-//	driver_data_t - destructor
-//-------------------------------------------------
-
-driver_data_t::~driver_data_t()
-{
-}
-
-//-------------------------------------------------
-//  machine_start - default implementation which
-//  calls to the legacy machine_start function
-//-------------------------------------------------
-
-void driver_data_t::machine_start()
-{
-	if (m_machine.m_config.m_machine_start != NULL)
-		(*m_machine.m_config.m_machine_start)(&m_machine);
+	memset(m_callbacks, 0, sizeof(m_callbacks));
 }
 
 
 //-------------------------------------------------
-//  machine_reset - default implementation which
-//  calls to the legacy machine_reset function
+//	static_set_game - set the game in the device
+//	configuration
 //-------------------------------------------------
 
-void driver_data_t::machine_reset()
+void driver_device_config_base::static_set_game(device_config *device, const game_driver *game)
 {
-	if (m_machine.m_config.m_machine_reset != NULL)
-		(*m_machine.m_config.m_machine_reset)(&m_machine);
+	downcast<driver_device_config_base *>(device)->m_game = game;
 }
 
 
 //-------------------------------------------------
-//  sound_start - default implementation which
-//  calls to the legacy sound_start function
+//	static_set_machine_start - set the legacy
+//	machine start callback in the device
+//	configuration
 //-------------------------------------------------
 
-void driver_data_t::sound_start()
+void driver_device_config_base::static_set_callback(device_config *device, callback_type type, legacy_callback_func callback)
 {
-	if (m_machine.m_config.m_sound_start != NULL)
-		(*m_machine.m_config.m_sound_start)(&m_machine);
+	downcast<driver_device_config_base *>(device)->m_callbacks[type] = callback;
 }
 
 
 //-------------------------------------------------
-//  sound_reset - default implementation which
-//  calls to the legacy sound_reset function
+//      static_set_palette_init - set the legacy
+//      palette_init callback in the device
+//      configuration
 //-------------------------------------------------
 
-void driver_data_t::sound_reset()
+void driver_device_config_base::static_set_palette_init(device_config *device, palette_init_func callback)
 {
-	if (m_machine.m_config.m_sound_reset != NULL)
-		(*m_machine.m_config.m_sound_reset)(&m_machine);
+	downcast<driver_device_config_base *>(device)->m_palette_init = callback;
 }
 
 
 //-------------------------------------------------
-//  palette_init - default implementation which
-//  calls to the legacy palette_init function
+//      static_set_video_update - set the legacy
+//      video update callback in the device
+//      configuration
 //-------------------------------------------------
 
-void driver_data_t::palette_init(const UINT8 *color_prom)
+void driver_device_config_base::static_set_video_update(device_config *device, video_update_func callback)
 {
-	if (m_machine.m_config.m_init_palette != NULL)
-		(*m_machine.m_config.m_init_palette)(&m_machine, color_prom);
+	downcast<driver_device_config_base *>(device)->m_video_update = callback;
 }
 
 
 //-------------------------------------------------
-//  video_start - default implementation which
-//  calls to the legacy video_start function
+//	rom_region - return a pointer to the ROM
+//	regions specified for the current game
 //-------------------------------------------------
 
-void driver_data_t::video_start()
+const rom_entry *driver_device_config_base::rom_region() const
 {
-	if (m_machine.m_config.m_video_start != NULL)
-		(*m_machine.m_config.m_video_start)(&m_machine);
+	return m_game->rom;
+}
+
+
+
+//-------------------------------------------------
+//	DRIVER DEVICE
+//-------------------------------------------------
+
+//-------------------------------------------------
+//	driver_device - constructor
+//-------------------------------------------------
+
+driver_device::driver_device(running_machine &machine, const driver_device_config_base &config)
+	: device_t(machine, config),
+	  m_config(config)
+{
+}
+
+//-------------------------------------------------
+//	driver_device - destructor
+//-------------------------------------------------
+
+driver_device::~driver_device()
+{
 }
 
 
 //-------------------------------------------------
-//  video_reset - default implementation which
-//  calls to the legacy video_reset function
+//	driver_start - default implementation which
+//	does nothing
 //-------------------------------------------------
 
-void driver_data_t::video_reset()
+void driver_device::driver_start()
 {
-	if (m_machine.m_config.m_video_reset != NULL)
-		(*m_machine.m_config.m_video_reset)(&m_machine);
 }
 
 
 //-------------------------------------------------
-//  video_update - default implementation which
-//  calls to the legacy video_update function
+//	machine_start - default implementation which
+//	calls to the legacy machine_start function
 //-------------------------------------------------
 
-bool driver_data_t::video_update(screen_device &screen, bitmap_t &bitmap, const rectangle &cliprect)
+void driver_device::machine_start()
 {
-	if (m_machine.m_config.m_video_update != NULL)
-		return (*m_machine.m_config.m_video_update)(&screen, &bitmap, &cliprect);
+	if (m_config.m_callbacks[driver_device_config_base::CB_MACHINE_START] != NULL)
+		(*m_config.m_callbacks[driver_device_config_base::CB_MACHINE_START])(&m_machine);
+}
 
+
+//-------------------------------------------------
+//	sound_start - default implementation which
+//	calls to the legacy sound_start function
+//-------------------------------------------------
+
+void driver_device::sound_start()
+{
+	if (m_config.m_callbacks[driver_device_config_base::CB_SOUND_START] != NULL)
+		(*m_config.m_callbacks[driver_device_config_base::CB_SOUND_START])(&m_machine);
+}
+
+
+//-------------------------------------------------
+//	video_start - default implementation which
+//	calls to the legacy video_start function
+//-------------------------------------------------
+
+void driver_device::video_start()
+{
+	if (m_config.m_callbacks[driver_device_config_base::CB_VIDEO_START] != NULL)
+		(*m_config.m_callbacks[driver_device_config_base::CB_VIDEO_START])(&m_machine);
+}
+
+
+//-------------------------------------------------
+//	driver_reset - default implementation which
+//	does nothing
+//-------------------------------------------------
+
+void driver_device::driver_reset()
+{
+}
+
+
+//-------------------------------------------------
+//	machine_reset - default implementation which
+//	calls to the legacy machine_reset function
+//-------------------------------------------------
+
+void driver_device::machine_reset()
+{
+	if (m_config.m_callbacks[driver_device_config_base::CB_MACHINE_RESET] != NULL)
+		(*m_config.m_callbacks[driver_device_config_base::CB_MACHINE_RESET])(&m_machine);
+}
+
+
+//-------------------------------------------------
+//	sound_reset - default implementation which
+//	calls to the legacy sound_reset function
+//-------------------------------------------------
+
+void driver_device::sound_reset()
+{
+	if (m_config.m_callbacks[driver_device_config_base::CB_SOUND_RESET] != NULL)
+		(*m_config.m_callbacks[driver_device_config_base::CB_SOUND_RESET])(&m_machine);
+}
+
+
+//-------------------------------------------------
+//	video_reset - default implementation which
+//	calls to the legacy video_reset function
+//-------------------------------------------------
+
+void driver_device::video_reset()
+{
+	if (m_config.m_callbacks[driver_device_config_base::CB_VIDEO_RESET] != NULL)
+		(*m_config.m_callbacks[driver_device_config_base::CB_VIDEO_RESET])(&m_machine);
+}
+
+
+//-------------------------------------------------
+//	video_update - default implementation which
+//	calls to the legacy video_update function
+//-------------------------------------------------
+
+bool driver_device::video_update(screen_device &screen, bitmap_t &bitmap, const rectangle &cliprect)
+{
+	if (m_config.m_video_update != NULL)
+		return (*m_config.m_video_update)(&screen, &bitmap, &cliprect);
 	return 0;
 }
 
 
 //-------------------------------------------------
-//  video_eof - default implementation which
-//  calls to the legacy video_eof function
+//	video_eof - default implementation which
+//	calls to the legacy video_eof function
 //-------------------------------------------------
 
-void driver_data_t::video_eof()
+void driver_device::video_eof()
 {
-	if (m_machine.m_config.m_video_eof != NULL)
-		(*m_machine.m_config.m_video_eof)(&m_machine);
+	if (m_config.m_callbacks[driver_device_config_base::CB_VIDEO_EOF] != NULL)
+		(*m_config.m_callbacks[driver_device_config_base::CB_VIDEO_EOF])(&m_machine);
 }
 
 
 //-------------------------------------------------
-//  pre_save - default implementation which
-//  does nothing
+//	device_start - device override which calls
+//	the various helpers
 //-------------------------------------------------
 
-void driver_data_t::pre_save()
+void driver_device::device_start()
 {
+	// reschedule ourselves to be last
+	if (next() != NULL)
+		throw device_missing_dependencies();
+
+	// call the game-specific init
+	if (m_config.m_game->driver_init != NULL)
+		(*m_config.m_game->driver_init)(&m_machine);
+
+	// finish image devices init process
+	image_postdevice_init(&m_machine);
+
+	// call palette_init if present
+	if (m_config.m_palette_init != NULL)
+		(*m_config.m_palette_init)(&m_machine, memory_region(machine, "proms"));
+
+	// start the various pieces
+	driver_start();
+	machine_start();
+	sound_start();
+	video_start();
 }
 
 
 //-------------------------------------------------
-//  post_load - default implementation which
-//  does nothing
+//	device_reset - device override which calls
+//	the various helpers
 //-------------------------------------------------
 
-void driver_data_t::post_load()
+void driver_device::device_reset()
 {
+	// reset each piece
+	driver_reset();
+	machine_reset();
+	sound_reset();
+	video_reset();
 }
 
 

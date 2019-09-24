@@ -1154,10 +1154,71 @@ const game_driver *const drivers[] =
 	DRIVER( myststono )
 	DRIVER( myststonoi )
 
+	/* *************** */
+	/*   IREM - M72    */
+	/* *************** */
+	DRIVER( rtype )		// R-Type (World)
+	DRIVER( rtypej )	// R-Type (Japan)
+	DRIVER( rtypejp )	// R-Type (Japan prototype)
+	DRIVER( rtypeu )	// R-Type (US)
+	DRIVER( rtypeb )	// R-Type (World bootleg)
+	//
+	DRIVER( bchopper )	// Battle Chopper
+	DRIVER( mrheli )	// Mr. HELI no Dai-Bouken
+	//
+	DRIVER( nspirit )	// Ninja Spirit
+	DRIVER( nspiritj )	// Saigo no Nindou (Japan)
+	//
+	DRIVER( imgfight )	// Image Fight (World, revision A)
+	DRIVER( imgfightj )	// Image Fight (Japan)
+	//
+	DRIVER( loht )		// Legend of Hero Tonma
+	DRIVER( lohtj )		// Legend of Hero Tonma (Japan)
+	DRIVER( lohtb )		// Legend of Hero Tonma (bootleg, set 1)/* bootlegs, unique hw */
+	DRIVER( lohtb2 )	// Legend of Hero Tonma (bootleg, set 2)
+	//
+	DRIVER( xmultipl )	// X Multiply (World, M81)
+	DRIVER( xmultiplm72 )	// X Multiply (Japan, M72)
+	//
+	DRIVER( dbreed )	// Dragon Breed (M81 PCB version)
+	DRIVER( dbreedm72 )	// Dragon Breed (M72 PCB version)
+	//
+	DRIVER( rtype2 )	// R-Type II
+	DRIVER( rtype2j )	// R-Type II (Japan)
+	DRIVER( rtype2jc )	// R-Type II (Japan, revision C)
+	//
+	DRIVER( majtitle )	// Major Title (World)
+	DRIVER( majtitlej )	// Major Title (Japan)
+	//
+	DRIVER( hharry )	// Hammerin' Harry (World)
+	DRIVER( hharryu )	// Hammerin' Harry (US)
+	DRIVER( dkgensan )	// Daiku no Gensan (Japan, M82)
+	DRIVER( dkgensanm72 )	// Daiku no Gensan (Japan, M72)
+	//
+	/* Poundfor is a trackball game，that isn't included in FBA02.97.38 romsets */
+	DRIVER( poundfor )	// Pound for Pound (World)
+	DRIVER( poundforj )	// Pound for Pound (Japan)
+	DRIVER( poundforu )	// Pound for Pound (US)
+	//
+	DRIVER( airduel )	// Air Duel (World, M82-A-A + M82-B-A)
+	DRIVER( airduelm72 )	// Air Duel (Japan, M72)
+	//
+	DRIVER( cosmccop )	// Cosmic Cop (World)
+	DRIVER( gallop )	// Gallop - Armed police Unit (Japan)
+	//
+	DRIVER( ltswords )	// Lightning Swords
+	DRIVER( kengo )		// Ken-Go (set 1)
+	DRIVER( kengoa )	// Ken-Go (set 2)
+
+
+#endif	/* DRIVER_RECURSIVE */
+
+#if 0
+	// This driver temporarily hinders the update
 	/************************/
 	/*	IGS PGM1	*/
 	/************************/
-	DRIVER( pgm )			// System BIOS driver
+/*	DRIVER( pgm )			// System BIOS driver
 
 	DRIVER( orlegend )
 	DRIVER( orlegende )
@@ -1255,62 +1316,5 @@ const game_driver *const drivers[] =
 	DRIVER( espgal )
 
 	DRIVER( orleg2 )
-
-	/* *************** */
-	/*   IREM - M72    */
-	/* *************** */
-	DRIVER( rtype )		// R-Type (World)
-	DRIVER( rtypej )	// R-Type (Japan)
-	DRIVER( rtypejp )	// R-Type (Japan prototype)
-	DRIVER( rtypeu )	// R-Type (US)
-	DRIVER( rtypeb )	// R-Type (World bootleg)
-	//
-	DRIVER( bchopper )	// Battle Chopper
-	DRIVER( mrheli )	// Mr. HELI no Dai-Bouken
-	//
-	DRIVER( nspirit )	// Ninja Spirit
-	DRIVER( nspiritj )	// Saigo no Nindou (Japan)
-	//
-	DRIVER( imgfight )	// Image Fight (World, revision A)
-	DRIVER( imgfightj )	// Image Fight (Japan)
-	//
-	DRIVER( loht )		// Legend of Hero Tonma
-	DRIVER( lohtj )		// Legend of Hero Tonma (Japan)
-	DRIVER( lohtb )		// Legend of Hero Tonma (bootleg, set 1)/* bootlegs, unique hw */
-	DRIVER( lohtb2 )	// Legend of Hero Tonma (bootleg, set 2)
-	//
-	DRIVER( xmultipl )	// X Multiply (World, M81)
-	DRIVER( xmultiplm72 )	// X Multiply (Japan, M72)
-	//
-	DRIVER( dbreed )	// Dragon Breed (M81 PCB version)
-	DRIVER( dbreedm72 )	// Dragon Breed (M72 PCB version)
-	//
-	DRIVER( rtype2 )	// R-Type II
-	DRIVER( rtype2j )	// R-Type II (Japan)
-	DRIVER( rtype2jc )	// R-Type II (Japan, revision C)
-	//
-	DRIVER( majtitle )	// Major Title (World)
-	DRIVER( majtitlej )	// Major Title (Japan)
-	//
-	DRIVER( hharry )	// Hammerin' Harry (World)
-	DRIVER( hharryu )	// Hammerin' Harry (US)
-	DRIVER( dkgensan )	// Daiku no Gensan (Japan, M82)
-	DRIVER( dkgensanm72 )	// Daiku no Gensan (Japan, M72)
-	//
-	/* Poundfor is a trackball game，that isn't included in FBA02.97.38 romsets */
-	DRIVER( poundfor )	// Pound for Pound (World)
-	DRIVER( poundforj )	// Pound for Pound (Japan)
-	DRIVER( poundforu )	// Pound for Pound (US)
-	//
-	DRIVER( airduel )	// Air Duel (World, M82-A-A + M82-B-A)
-	DRIVER( airduelm72 )	// Air Duel (Japan, M72)
-	//
-	DRIVER( cosmccop )	// Cosmic Cop (World)
-	DRIVER( gallop )	// Gallop - Armed police Unit (Japan)
-	//
-	DRIVER( ltswords )	// Lightning Swords
-	DRIVER( kengo )		// Ken-Go (set 1)
-	DRIVER( kengoa )	// Ken-Go (set 2)
-
-
-#endif	/* DRIVER_RECURSIVE */
+*/
+#endif

@@ -1,12 +1,18 @@
 /*********************************************************************
+
     dvdisasm.c
+
     Disassembly debugger view.
+
 ****************************************************************************
+
     Copyright Aaron Giles
     All rights reserved.
+
     Redistribution and use in source and binary forms, with or without
     modification, are permitted provided that the following conditions are
     met:
+
         * Redistributions of source code must retain the above copyright
           notice, this list of conditions and the following disclaimer.
         * Redistributions in binary form must reproduce the above copyright
@@ -16,6 +22,7 @@
         * Neither the name 'MAME' nor the names of its contributors may be
           used to endorse or promote products derived from this software
           without specific prior written permission.
+
     THIS SOFTWARE IS PROVIDED BY AARON GILES ''AS IS'' AND ANY EXPRESS OR
     IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
     WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -27,19 +34,19 @@
     STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
     IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
     POSSIBILITY OF SUCH DAMAGE.
+
 ***************************************************************************/
 
 #include "emu.h"
 #include "debugvw.h"
 #include "dvdisasm.h"
-#include "debugcmt.h"
 #include "debugcpu.h"
 
 
 
-//*************************************************************************/
-//	DEBUG VIEW DISASM SOURCE
-//*************************************************************************/
+//**************************************************************************
+//  DEBUG VIEW DISASM SOURCE
+//**************************************************************************
 
 //-------------------------------------------------
 //  debug_view_disasm_source - constructor
@@ -55,9 +62,9 @@ debug_view_disasm_source::debug_view_disasm_source(const char *name, device_t &d
 
 
 
-//*************************************************************************/
-//	DEBUG VIEW DISASM
-//*************************************************************************/
+//**************************************************************************
+//  DEBUG VIEW DISASM
+//**************************************************************************
 
 //-------------------------------------------------
 //  debug_view_disasm - constructor
@@ -90,7 +97,7 @@ debug_view_disasm::debug_view_disasm(running_machine &machine, debug_view_osd_up
 	for (const debug_view_source *source = m_source_list.head(); source != NULL; source = source->next())
 	{
 		const debug_view_disasm_source &dasmsource = downcast<const debug_view_disasm_source &>(*source);
-		total_comments += debug_comment_get_count(&dasmsource.m_device);
+		total_comments += dasmsource.m_device.debug()->comment_count();
 	}
 
 	// initialize
@@ -235,12 +242,9 @@ offs_t debug_view_disasm::find_pc_backwards(offs_t targetpc, int numinstrs)
 
 	// compute the increment
 	int minlen = source.m_space->byte_to_address(source.m_disasmintf->min_opcode_bytes());
-	if (minlen == 0)
-		minlen = 1;
-
+	if (minlen == 0) minlen = 1;
 	int maxlen = source.m_space->byte_to_address(source.m_disasmintf->max_opcode_bytes());
-	if (maxlen == 0)
-		maxlen = 1;
+	if (maxlen == 0) maxlen = 1;
 
 	// start off numinstrs back
 	offs_t curpc = targetpc - minlen * numinstrs;
@@ -256,7 +260,6 @@ offs_t debug_view_disasm::find_pc_backwards(offs_t targetpc, int numinstrs)
 		// fill the buffer up to the target
 		offs_t curpcbyte = source.m_space->address_to_byte(curpc) & source.m_space->logbytemask();
 		UINT8 opbuf[1024], argbuf[1024];
-
 		while (curpcbyte < fillpcbyte)
 		{
 			fillpcbyte--;
@@ -434,7 +437,7 @@ bool debug_view_disasm::recompute(offs_t pc, int startline, int lines)
 		{
 			// get and add the comment, if present
 			offs_t comment_address = source.m_space->byte_to_address(m_byteaddress[instr]);
-			const char *text = debug_comment_get_text(&source.m_device, comment_address, debug_comment_get_opcode_crc32(&source.m_device, comment_address));
+			const char *text = source.m_device.debug()->comment_text(comment_address);
 			if (text != NULL)
 				sprintf(&destbuf[m_divider2], "// %.*s", m_allocated.x - m_divider2 - 1, text);
 		}
@@ -447,11 +450,10 @@ bool debug_view_disasm::recompute(offs_t pc, int startline, int lines)
 	// update opcode base information
 	m_last_direct_decrypted = source.m_space->direct().decrypted();
 	m_last_direct_raw = source.m_space->direct().raw();
-	m_last_change_count = debug_comment_all_change_count(&m_machine);
+	m_last_change_count = source.m_device.debug()->comment_change_count();
 
 	// now longer need to recompute
 	m_recompute = false;
-
 	return changed;
 }
 
@@ -499,17 +501,16 @@ void debug_view_disasm::view_update()
 		m_recompute = true;
 
 	// if the comments have changed, redo it
-	if (m_last_change_count != debug_comment_all_change_count(&m_machine))
+	if (m_last_change_count != source.m_device.debug()->comment_change_count())
 		m_recompute = true;
 
 	// if we need to recompute, do it
 	bool recomputed_this_time = false;
-
 recompute:
 	if (m_recompute)
 	{
 		// recompute the view
-		if (m_byteaddress != NULL && m_last_change_count != debug_comment_all_change_count(&m_machine))
+		if (m_byteaddress != NULL && m_last_change_count != source.m_device.debug()->comment_change_count())
 		{
 			// smoosh us against the left column, but not the top row
 			m_topleft.x = 0;
@@ -694,14 +695,11 @@ void debug_view_disasm::set_selected_address(offs_t address)
 {
 	const debug_view_disasm_source &source = downcast<const debug_view_disasm_source &>(*m_source);
 	offs_t byteaddress = source.m_space->address_to_byte(address) & source.m_space->logbytemask();
-
 	for (int line = 0; line < m_total.y; line++)
-	{
 		if (m_byteaddress[line] == byteaddress)
 		{
 			m_cursor.y = line;
 			set_cursor_position(m_cursor);
 			break;
 		}
-	}
 }

@@ -41,23 +41,25 @@
 #include "validity.h"
 
 
-/**************************************************************************/
-//  	PARAMETERS
-/**************************************************************************/
+//**************************************************************************
+//  PARAMETERS
+//**************************************************************************
 
 #define DETECT_OVERLAPPING_MEMORY	(0)
 
 
-/**************************************************************************/
-//  	CONSTANTS
-/**************************************************************************/
+
+//**************************************************************************
+//  CONSTANTS
+//**************************************************************************
 
 const int TRIGGER_SUSPENDTIME = -4000;
 
 
-/**************************************************************************/
-//  	ADDRESS SPACE CONFIG
-/**************************************************************************/
+
+//**************************************************************************
+//  ADDRESS SPACE CONFIG
+//**************************************************************************
 
 //-------------------------------------------------
 //  address_space_config - constructors
@@ -103,9 +105,10 @@ address_space_config::address_space_config(const char *name, endianness_t endian
 }
 
 
-/**************************************************************************/
-//  	MEMORY DEVICE CONFIG
-/**************************************************************************/
+
+//**************************************************************************
+//  MEMORY DEVICE CONFIG
+//**************************************************************************
 
 //-------------------------------------------------
 //  device_config_memory_interface - constructor
@@ -141,26 +144,18 @@ const address_space_config *device_config_memory_interface::memory_space_config(
 
 
 //-------------------------------------------------
-//  interface_process_token - token processing for
-//  the memory interface
+//  static_set_vblank_int - configuration helper 
+//  to set up VBLANK interrupts on the device
 //-------------------------------------------------
 
-bool device_config_memory_interface::interface_process_token(UINT32 entrytype, const machine_config_token *&tokens)
+void device_config_memory_interface::static_set_addrmap(device_config *device, int spacenum, address_map_constructor map)
 {
-	UINT32 data32;
-
-	switch (entrytype)
-	{
-		// specify device address map
-		case MCONFIG_TOKEN_DIMEMORY_MAP:
-			TOKEN_UNGET_UINT32(tokens);
-			TOKEN_GET_UINT32_UNPACK2(tokens, entrytype, 8, data32, 8);
-			assert(data32 < ARRAY_LENGTH(m_address_map));
-			m_address_map[data32] = TOKEN_GET_PTR(tokens, addrmap);
-			return true;
-	}
-
-	return false;
+	device_config_memory_interface *memory = dynamic_cast<device_config_memory_interface *>(device);
+	if (memory == NULL)
+		throw emu_fatalerror("MDRV_DEVICE_ADDRESS_MAP called on device '%s' with no memory interface", device->tag());
+	if (spacenum >= ARRAY_LENGTH(memory->m_address_map))
+		throw emu_fatalerror("MDRV_DEVICE_ADDRESS_MAP called with out-of-range space number %d", device->tag(), spacenum);
+	memory->m_address_map[spacenum] = map;
 }
 
 
@@ -207,7 +202,7 @@ bool device_config_memory_interface::interface_validity_check(const game_driver 
 			}
 
 			// loop over entries and look for errors
-			for (address_map_entry *entry = map->m_entrylist.first(); entry != NULL; entry = entry->m_next)
+			for (address_map_entry *entry = map->m_entrylist.first(); entry != NULL; entry = entry->next())
 			{
 				UINT32 bytestart = spaceconfig->addr2byte(entry->m_addrstart);
 				UINT32 byteend = spaceconfig->addr2byte_end(entry->m_addrend);
@@ -216,7 +211,7 @@ bool device_config_memory_interface::interface_validity_check(const game_driver 
 				if (!detected_overlap)
 				{
 					address_map_entry *scan;
-					for (scan = map->m_entrylist.first(); scan != entry; scan = scan->m_next)
+					for (scan = map->m_entrylist.first(); scan != entry; scan = scan->next())
 						if (entry->m_addrstart <= scan->m_addrend && entry->m_addrend >= scan->m_addrstart &&
 							((entry->m_read.m_type != AMH_NONE && scan->m_read.m_type != AMH_NONE) ||
 							 (entry->m_write.m_type != AMH_NONE && scan->m_write.m_type != AMH_NONE)))
@@ -253,8 +248,8 @@ bool device_config_memory_interface::interface_validity_check(const game_driver 
 				{
 					// look for the region
 					bool found = false;
-					for (const rom_source *source = rom_first_source(&driver, &m_machine_config); source != NULL && !found; source = rom_next_source(&driver, &m_machine_config, source))
-						for (const rom_entry *romp = rom_first_region(&driver, source); !ROMENTRY_ISEND(romp) && !found; romp++)
+					for (const rom_source *source = rom_first_source(m_machine_config); source != NULL && !found; source = rom_next_source(*source))
+						for (const rom_entry *romp = rom_first_region(*source); !ROMENTRY_ISEND(romp) && !found; romp++)
 						{
 							const char *regiontag = ROMREGION_GETTAG(romp);
 							if (regiontag != NULL)
@@ -290,21 +285,21 @@ bool device_config_memory_interface::interface_validity_check(const game_driver 
 					mame_printf_error("%s: %s device '%s' %s space memory map entry references nonexistant device '%s'\n", driver.source_file, driver.name, devconfig->tag(), spaceconfig->m_name, entry->m_write.m_tag);
 					error = true;
 				}
-/*
+
 				// make sure ports exist
-              			if ((entry->read.type == AMH_PORT && entry->read.tag != NULL && portlist.find(entry->read.tag) == NULL) ||
-                  			(entry->write.type == AMH_PORT && entry->write.tag != NULL && portlist.find(entry->write.tag) == NULL))
-              			{
-                  			mame_printf_error("%s: %s device '%s' %s space memory map entry references nonexistant port tag '%s'\n", driver.source_file, driver.name, devconfig->tag(), spaceconfig->m_name, entry->read.tag);
-                  			error = true;
-              			}
-*/
+//              if ((entry->m_read.m_type == AMH_PORT && entry->m_read.m_tag != NULL && portlist.find(entry->m_read.m_tag) == NULL) ||
+//                  (entry->m_write.m_type == AMH_PORT && entry->m_write.m_tag != NULL && portlist.find(entry->m_write.m_tag) == NULL))
+//              {
+//                  mame_printf_error("%s: %s device '%s' %s space memory map entry references nonexistant port tag '%s'\n", driver.source_file, driver.name, devconfig->tag(), spaceconfig->m_name, entry->m_read.tag);
+//                  error = true;
+//              }
+
 				// validate bank and share tags
-				if (entry->m_read.m_type == AMH_BANK && !validate_tag(&driver, "bank", entry->m_read.m_tag))
+				if (entry->m_read.m_type == AMH_BANK && !validate_tag(driver, "bank", entry->m_read.m_tag))
 					error = true ;
-				if (entry->m_write.m_type == AMH_BANK && !validate_tag(&driver, "bank", entry->m_write.m_tag))
+				if (entry->m_write.m_type == AMH_BANK && !validate_tag(driver, "bank", entry->m_write.m_tag))
 					error = true;
-				if (entry->m_share != NULL && !validate_tag(&driver, "share", entry->m_share))
+				if (entry->m_share != NULL && !validate_tag(driver, "share", entry->m_share))
 					error = true;
 			}
 
@@ -317,9 +312,9 @@ bool device_config_memory_interface::interface_validity_check(const game_driver 
 
 
 
-/**************************************************************************/
-//  	MEMORY DEVICE MANAGEMENT
-/**************************************************************************/
+//**************************************************************************
+//  MEMORY DEVICE MANAGEMENT
+//**************************************************************************
 
 //-------------------------------------------------
 //  device_memory_interface - constructor

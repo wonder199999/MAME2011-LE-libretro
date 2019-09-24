@@ -44,7 +44,6 @@
 #include "dvdisasm.h"
 #include "dvmemory.h"
 #include "debugcmd.h"
-#include "debugcmt.h"
 #include "debugcpu.h"
 #include "debugcon.h"
 #include "express.h"
@@ -52,9 +51,9 @@
 
 
 
-/**************************************************************************/
-/*	DEBUG VIEW SOURCE						  */
-/**************************************************************************/
+//**************************************************************************
+//  DEBUG VIEW SOURCE
+//**************************************************************************
 
 //-------------------------------------------------
 //  debug_view_source - constructor
@@ -78,9 +77,9 @@ debug_view_source::~debug_view_source()
 
 
 
-/*************************************************************************/
-/*	DEBUG VIEW SOURCE LIST						 */
-/*************************************************************************/
+//**************************************************************************
+//  DEBUG VIEW SOURCE LIST
+//**************************************************************************
 
 //-------------------------------------------------
 //  debug_view_source_list - constructor
@@ -118,7 +117,6 @@ int debug_view_source_list::index(const debug_view_source &source) const
 			break;
 		result++;
 	}
-
 	return result;
 }
 
@@ -131,11 +129,9 @@ const debug_view_source *debug_view_source_list::by_index(int index) const
 {
 	if (m_head == NULL)
 		return NULL;
-
 	const debug_view_source *result;
 	for (result = m_head; index > 0 && result->m_next != NULL; result = result->m_next)
 		index--;
-
 	return result;
 }
 
@@ -190,15 +186,14 @@ const debug_view_source *debug_view_source_list::match_device(device_t *device) 
 	for (debug_view_source *source = m_head; source != NULL; source = source->m_next)
 		if (device == source->m_device)
 			return source;
-
 	return m_head;
 }
 
 
 
-/*************************************************************************/
-/*	DEBUG VIEW							 */
-/*************************************************************************/
+//**************************************************************************
+//  DEBUG VIEW
+//**************************************************************************
 
 //-------------------------------------------------
 //  debug_view - constructor
@@ -484,11 +479,14 @@ debug_view *debug_view_manager::alloc_view(debug_view_type type, debug_view_osd_
 			return append(auto_alloc(&m_machine, debug_view_log(m_machine, osdupdate, osdprivate)));
 
 		case DVT_TIMERS:
-		case DVT_ALLOCS:
-		default:
-			fatalerror("Attempt to create invalid debug view type %d\n", type); break;
-	}
+//          return append(auto_alloc(&m_machine, debug_view_timers(m_machine, osdupdate, osdprivate)));
 
+		case DVT_ALLOCS:
+//          return append(auto_alloc(&m_machine, debug_view_allocs(m_machine, osdupdate, osdprivate)));
+
+		default:
+			fatalerror("Attempt to create invalid debug view type %d\n", type);
+	}
 	return NULL;
 }
 
@@ -501,14 +499,12 @@ void debug_view_manager::free_view(debug_view &view)
 {
 	// free us but only if we're in the list
 	for (debug_view **viewptr = &m_viewlist; *viewptr != NULL; viewptr = &(*viewptr)->m_next)
-	{
 		if (*viewptr == &view)
 		{
 			*viewptr = view.m_next;
 			auto_free(&m_machine, &view);
 			break;
 		}
-	}
 }
 
 
@@ -544,8 +540,7 @@ void debug_view_manager::flush_osd_updates()
 debug_view *debug_view_manager::append(debug_view *view)
 {
 	debug_view **viewptr;
-	for (viewptr = &m_viewlist; *viewptr != NULL; viewptr = &(*viewptr)->m_next)
-		;
+	for (viewptr = &m_viewlist; *viewptr != NULL; viewptr = &(*viewptr)->m_next) ;
 	*viewptr = view;
 	return view;
 }
@@ -644,6 +639,5 @@ bool debug_view_expression::recompute()
 
 	// expression no longer dirty by definition
 	m_dirty = false;
-
 	return changed;
 }

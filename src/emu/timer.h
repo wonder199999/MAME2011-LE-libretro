@@ -41,7 +41,7 @@
 #define timer_alloc(m,c,ptr)			_timer_alloc_internal(m, c, ptr, __FILE__, __LINE__, #c)
 #define timer_pulse(m,e,ptr,p,c)		_timer_pulse_internal(m, e, ptr, p, c, __FILE__, __LINE__, #c)
 #define timer_set(m,d,ptr,p,c)			_timer_set_internal(m, d, ptr, p, c, __FILE__, __LINE__, #c)
-#define timer_call_after_resynch(m,ptr,p,c)	_timer_set_internal(m, attotime_zero, ptr, p, c, __FILE__, __LINE__, #c)
+#define timer_call_after_resynch(m,ptr,p,c) _timer_set_internal(m, attotime_zero, ptr, p, c, __FILE__, __LINE__, #c)
 
 /* macros for a timer callback functions */
 #define TIMER_CALLBACK(name)			void name(running_machine *machine, void *ptr, int param)
@@ -63,52 +63,47 @@ typedef void (*timer_fired_func)(running_machine *machine, void *ptr, INT32 para
 typedef void (*timer_device_fired_func)(timer_device &timer, void *ptr, INT32 param);
 
 
+
+
 struct timer_execution_state
 {
 	attotime				nextfire;		/* time that the head of the timer list will fire */
 	attotime				basetime;		/* global basetime; everything moves forward from here */
-	attoseconds_t				curquantum;		/* current quantum of execution */
+	attoseconds_t			curquantum;		/* current quantum of execution */
 };
 
 
 
 //**************************************************************************
 //  TIMER DEVICE CONFIGURATION MACROS
-//**************************************************************************/
+//**************************************************************************
 
 #define MDRV_TIMER_ADD(_tag, _callback) \
 	MDRV_DEVICE_ADD(_tag, TIMER, 0) \
-	MDRV_DEVICE_INLINE_DATA16(timer_device_config::INLINE_TYPE, timer_device_config::TIMER_TYPE_GENERIC) \
-	MDRV_DEVICE_INLINE_DATAPTR(timer_device_config::INLINE_CALLBACK, _callback)
+	timer_device_config::static_configure_generic(device, _callback); \
 
 #define MDRV_TIMER_ADD_PERIODIC(_tag, _callback, _period) \
 	MDRV_DEVICE_ADD(_tag, TIMER, 0) \
-	MDRV_DEVICE_INLINE_DATA16(timer_device_config::INLINE_TYPE, timer_device_config::TIMER_TYPE_PERIODIC) \
-	MDRV_DEVICE_INLINE_DATAPTR(timer_device_config::INLINE_CALLBACK, _callback) \
-	MDRV_DEVICE_INLINE_DATA64(timer_device_config::INLINE_PERIOD, UINT64_ATTOTIME_IN_##_period)
+	timer_device_config::static_configure_periodic(device, _callback, ATTOTIME_IN_##_period); \
 
 #define MDRV_TIMER_ADD_SCANLINE(_tag, _callback, _screen, _first_vpos, _increment) \
 	MDRV_DEVICE_ADD(_tag, TIMER, 0) \
-	MDRV_DEVICE_INLINE_DATA16(timer_device_config::INLINE_TYPE, timer_device_config::TIMER_TYPE_SCANLINE) \
-	MDRV_DEVICE_INLINE_DATAPTR(timer_device_config::INLINE_CALLBACK, _callback) \
-	MDRV_DEVICE_INLINE_DATAPTR(timer_device_config::INLINE_SCREEN, _screen) \
-	MDRV_DEVICE_INLINE_DATA16(timer_device_config::INLINE_FIRST_VPOS, _first_vpos) \
-	MDRV_DEVICE_INLINE_DATA16(timer_device_config::INLINE_INCREMENT, _increment)
+	timer_device_config::static_configure_scanline(device, _callback, _screen, _first_vpos, _increment); \
 
 #define MDRV_TIMER_MODIFY(_tag) \
 	MDRV_DEVICE_MODIFY(_tag)
 
 #define MDRV_TIMER_CALLBACK(_callback) \
-	MDRV_DEVICE_INLINE_DATA32(timer_device_config::INLINE_CALLBACK, _callback)
+	timer_device_config::static_set_callback(device, _callback); \
 
 #define MDRV_TIMER_START_DELAY(_start_delay) \
-	MDRV_DEVICE_INLINE_DATA64(timer_device_config::INLINE_DELAY, UINT64_ATTOTIME_IN_##_start_delay)
+	timer_device_config::static_set_start_delay(device, ATTOTIME_IN_##_start_delay); \
 
 #define MDRV_TIMER_PARAM(_param) \
-	MDRV_DEVICE_INLINE_DATA32(timer_device_config::INLINE_PARAM, _param)
+	timer_device_config::static_set_param(device, _param); \
 
 #define MDRV_TIMER_PTR(_ptr) \
-	MDRV_DEVICE_INLINE_DATAPTR(timer_device_config::INLINE_PTR, _ptr)
+	timer_device_config::static_set_ptr(device, (void *)(_ptr)); \
 
 
 
@@ -155,6 +150,9 @@ int timer_count_anonymous(running_machine *machine);
 /* allocate a permament timer that isn't primed yet */
 emu_timer *_timer_alloc_internal(running_machine *machine, timer_fired_func callback, void *param, const char *file, int line, const char *func);
 
+/* allocate a permament device timer that isn't primed yet */
+emu_timer *device_timer_alloc(device_t &device, device_timer_id id = 0, void *ptr = NULL);
+
 /* adjust the time when this timer will fire and disable any periodic firings */
 void timer_adjust_oneshot(emu_timer *which, attotime duration, INT32 param);
 
@@ -164,6 +162,9 @@ void timer_adjust_periodic(emu_timer *which, attotime start_delay, INT32 param, 
 
 
 /* ----- anonymous timer management ----- */
+
+/* request a one-shot temporary timer for a device */
+void device_timer_call_after_resynch(device_t &device, device_timer_id id = 0, INT32 param = 0, void *ptr = NULL);
 
 /* allocate a one-shot timer, which calls the callback after the given duration */
 void _timer_set_internal(running_machine *machine, attotime duration, void *ptr, INT32 param, timer_fired_func callback, const char *file, int line, const char *func);
@@ -231,19 +232,18 @@ public:
 	static device_config *static_alloc_device_config(const machine_config &mconfig, const char *tag, const device_config *owner, UINT32 clock);
 	virtual device_t *alloc_device(running_machine &machine) const;
 
-	// indexes to inline data
-	enum
-	{
-		INLINE_TYPE,
-		INLINE_CALLBACK,
-		INLINE_PERIOD,
-		INLINE_SCREEN,
-		INLINE_FIRST_VPOS,
-		INLINE_INCREMENT,
-		INLINE_DELAY,
-		INLINE_PARAM,
-		INLINE_PTR
-	};
+	// inline configuration helpers
+	static void static_configure_generic(device_config *device, timer_device_fired_func callback);
+	static void static_configure_periodic(device_config *device, timer_device_fired_func callback, attotime period);
+	static void static_configure_scanline(device_config *device, timer_device_fired_func callback, const char *screen, int first_vpos, int increment);
+	static void static_set_callback(device_config *device, timer_device_fired_func callback);
+	static void static_set_start_delay(device_config *device, attotime delay);
+	static void static_set_param(device_config *device, int param);
+	static void static_set_ptr(device_config *device, void *ptr);
+
+private:
+	// device_config overrides
+	virtual bool device_validity_check(const game_driver &driver) const;
 
 	// timer types
 	enum timer_type
@@ -253,25 +253,20 @@ public:
 		TIMER_TYPE_GENERIC
 	};
 
-private:
-	// device_config overrides
-	virtual void device_config_complete();
-	virtual bool device_validity_check(const game_driver &driver) const;
-
 	// configuration data
-	timer_type					m_type;		// type of timer
-	timer_device_fired_func	m_callback;				// the timer's callback function
-	void					*m_ptr;			// the pointer parameter passed to the timer callback
+	timer_type				m_type;				// type of timer
+	timer_device_fired_func	m_callback;			// the timer's callback function
+	void *					m_ptr;				// the pointer parameter passed to the timer callback
 
 	// periodic timers only
-	UINT64						m_start_delay;	// delay before the timer fires for the first time
-	UINT64						m_period;	// period of repeated timer firings
-	INT32						m_param;	// the integer parameter passed to the timer callback
+	attotime				m_start_delay;		// delay before the timer fires for the first time
+	attotime				m_period;			// period of repeated timer firings
+	INT32					m_param;			// the integer parameter passed to the timer callback
 
 	// scanline timers only
-	const char				*m_screen;		// the name of the screen this timer tracks
-	UINT32						m_first_vpos;	// the first vertical scanline position the timer fires on
-	UINT32						m_increment;	// the number of scanlines between firings
+	const char *			m_screen;			// the name of the screen this timer tracks
+	UINT32					m_first_vpos;		// the first vertical scanline position the timer fires on
+	UINT32					m_increment;		// the number of scanlines between firings
 };
 
 
@@ -319,12 +314,12 @@ private:
 	void scanline_timer_callback(int scanline);
 
 	// internal state
-	const timer_device_config	&m_config;
-	emu_timer			*m_timer;	// the backing timer
-	void				*m_ptr;		// the pointer parameter passed to the timer callback
+	const timer_device_config &m_config;
+	emu_timer *		m_timer;			// the backing timer
+	void *			m_ptr;				// the pointer parameter passed to the timer callback
 
 	// scanline timers only
-	screen_device *m_screen;			// pointer to the screen
+	screen_device *m_screen;		// pointer to the screen
 	bool			m_first_time;		// indicates that the system is starting
 };
 

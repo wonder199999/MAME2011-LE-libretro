@@ -1,6 +1,6 @@
 /***************************************************************************
 
-    eeprom.h
+    eeprom.c
 
     Serial eeproms.
 
@@ -11,18 +11,18 @@
 
 
 
-//**************************************************************************
+//*************************************************************************/
 //  DEBUGGING
-//**************************************************************************/
+//*************************************************************************/
 
-#define VERBOSE	0
-#define LOG(x)	do { if (VERBOSE) logerror x; } while (0)
+#define VERBOSE 0
+#define LOG(x) do { if (VERBOSE) logerror x; } while (0)
 
 
 
-//**************************************************************************
+//*************************************************************************/
 //  GLOBAL VARIABLES
-//**************************************************************************/
+//*************************************************************************/
 
 const eeprom_interface eeprom_interface_93C46 =
 {
@@ -66,9 +66,9 @@ ADDRESS_MAP_END
 
 
 
-//**************************************************************************
+//*************************************************************************/
 //  DEVICE CONFIGURATION
-//**************************************************************************/
+//*************************************************************************/
 
 //-------------------------------------------------
 //  eeprom_device_config - constructor
@@ -78,10 +78,10 @@ eeprom_device_config::eeprom_device_config(const machine_config &mconfig, const 
 	: device_config(mconfig, static_alloc_device_config, "EEPROM", tag, owner, clock),
 	  device_config_memory_interface(mconfig, *this),
 	  device_config_nvram_interface(mconfig, *this),
-	  m_default_data(NULL),
 	  m_default_data_size(0),
 	  m_default_value(0)
 {
+	  m_default_data.u8 = NULL;
 }
 
 
@@ -107,28 +107,53 @@ device_t *eeprom_device_config::alloc_device(running_machine &machine) const
 
 
 //-------------------------------------------------
-//  device_config_complete - perform any
-//  operations now that the configuration is
-//  complete
+//  static_set_interface - configuration helper 
+//  to set the interface
 //-------------------------------------------------
 
-void eeprom_device_config::device_config_complete()
+void eeprom_device_config::static_set_interface(device_config *device, const eeprom_interface &interface)
 {
-	// extract inline configuration from raw data
-	const eeprom_interface *intf = reinterpret_cast<const eeprom_interface *>(m_inline_data[INLINE_INTERFACE]);
-	m_default_data = reinterpret_cast<const UINT8 *>(m_inline_data[INLINE_DATAPTR]);
-	m_default_data_size = m_inline_data[INLINE_DATASIZE];
-	m_default_value = m_inline_data[INLINE_DEFVALUE];
+	eeprom_device_config *eeprom = downcast<eeprom_device_config *>(device);
+	*static_cast<eeprom_interface *>(eeprom) = interface;
 
-	// inherit a copy of the static data
-	if (intf != NULL)
-		*static_cast<eeprom_interface *>(this) = *intf;
-
-	// now describe our address space
-	if (m_data_bits == 8)
-		m_space_config = address_space_config("eeprom", ENDIANNESS_BIG, 8,  m_address_bits, 0, *ADDRESS_MAP_NAME(eeprom_map8));
+	// describe our address space
+	if (eeprom->m_data_bits == 8)
+		eeprom->m_space_config = address_space_config("eeprom", ENDIANNESS_BIG, 8,  eeprom->m_address_bits, 0, *ADDRESS_MAP_NAME(eeprom_map8));
 	else
-		m_space_config = address_space_config("eeprom", ENDIANNESS_BIG, 16, m_address_bits * 2, 0, *ADDRESS_MAP_NAME(eeprom_map16));
+		eeprom->m_space_config = address_space_config("eeprom", ENDIANNESS_BIG, 16, eeprom->m_address_bits * 2, 0, *ADDRESS_MAP_NAME(eeprom_map16));
+}
+
+
+//-------------------------------------------------
+//  static_set_default_data - configuration helpers
+//  to set the default data
+//-------------------------------------------------
+
+void eeprom_device_config::static_set_default_data(device_config *device, const UINT8 *data, UINT32 size)
+{
+	eeprom_device_config *eeprom = downcast<eeprom_device_config *>(device);
+	assert(eeprom->m_data_bits == 8);
+	eeprom->m_default_data.u8 = const_cast<UINT8 *>(data);
+	eeprom->m_default_data_size = size;
+}
+
+void eeprom_device_config::static_set_default_data(device_config *device, const UINT16 *data, UINT32 size)
+{
+	eeprom_device_config *eeprom = downcast<eeprom_device_config *>(device);
+	assert(eeprom->m_data_bits == 16);
+	eeprom->m_default_data.u16 = const_cast<UINT16 *>(data);
+	eeprom->m_default_data_size = size / 2;
+}
+
+
+//-------------------------------------------------
+//  static_set_default_value - configuration helper
+//  to set the default value
+//-------------------------------------------------
+
+void eeprom_device_config::static_set_default_value(device_config *device, UINT16 value)
+{
+	downcast<eeprom_device_config *>(device)->m_default_value = 0x10000 | value;
 }
 
 
@@ -141,12 +166,7 @@ bool eeprom_device_config::device_validity_check(const game_driver &driver) cons
 {
 	bool error = false;
 
-	if (m_inline_data[INLINE_INTERFACE] == 0)
-	{
-		mame_printf_error("%s: %s eeprom device '%s' did not specify an interface\n", driver.source_file, driver.name, tag());
-		error = true;
-	}
-	else if (m_data_bits != 8 && m_data_bits != 16)
+	if (m_data_bits != 8 && m_data_bits != 16)
 	{
 		mame_printf_error("%s: %s eeprom device '%s' specified invalid data width %d\n", driver.source_file, driver.name, tag(), m_data_bits);
 		error = true;
@@ -168,9 +188,9 @@ const address_space_config *eeprom_device_config::memory_space_config(int spacen
 
 
 
-//**************************************************************************
+//*************************************************************************/
 //  LIVE DEVICE
-//**************************************************************************/
+//*************************************************************************/
 
 //-------------------------------------------------
 //  eeprom_device - constructor
@@ -244,9 +264,12 @@ void eeprom_device::nvram_default()
 			m_addrspace[0]->write_word(offs * 2, default_value);
 
 	/* handle hard-coded data from the driver */
-	if (m_config.m_default_data != NULL)
-		for (offs_t offs = 0; offs < m_config.m_default_data_size; offs++)
-			m_addrspace[0]->write_byte(offs, m_config.m_default_data[offs]);
+	if (m_config.m_default_data.u8 != NULL)
+		for (offs_t offs = 0; offs < m_config.m_default_data_size; offs++) {
+			if (m_config.m_data_bits == 8)
+				m_addrspace[0]->write_byte(offs, m_config.m_default_data.u8[offs]);
+			else
+				m_addrspace[0]->write_word(offs * 2, m_config.m_default_data.u16[offs]); }
 
 	/* populate from a memory region if present */
 	if (m_region != NULL)
@@ -304,9 +327,9 @@ void eeprom_device::nvram_write(mame_file &file)
 
 
 
-//**************************************************************************
+//*************************************************************************/
 //  READ/WRITE HANDLERS
-//**************************************************************************/
+//*************************************************************************/
 
 WRITE_LINE_DEVICE_HANDLER( eeprom_write_bit )
 {
@@ -410,9 +433,9 @@ logerror("EEPROM read %04x from address %02x\n",m_data_bits,m_read_address);
 
 
 
-//**************************************************************************
+//*************************************************************************/
 //  INTERNAL HELPERS
-//**************************************************************************/
+//*************************************************************************/
 
 void eeprom_device::write(int bit)
 {

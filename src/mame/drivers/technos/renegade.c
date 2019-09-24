@@ -884,10 +884,7 @@ static MACHINE_RESET( renegade )
  *	Machine drivers
  *************************************/
 
-static MACHINE_DRIVER_START( renegade )
-	/* driver data */
-	MDRV_DRIVER_DATA(renegade_state)
-
+static MACHINE_CONFIG_START( renegade, renegade_state )
 	/* basic machine hardware */
 	MDRV_CPU_ADD("maincpu", M6502, MAIN_CLOCK/8)		/* 1.5 MHz (measured) */
 	MDRV_CPU_PROGRAM_MAP(renegade_map)
@@ -924,13 +921,12 @@ static MACHINE_DRIVER_START( renegade )
 	MDRV_SOUND_ADD("msm", MSM5205, MAIN_CLOCK/32)
 	MDRV_SOUND_CONFIG(msm5205_config)
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 
-static MACHINE_DRIVER_START( kuniokunb )
-	MDRV_IMPORT_FROM(renegade)
+static MACHINE_CONFIG_DERIVED( kuniokunb, renegade )
 	MDRV_DEVICE_REMOVE("mcu")
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 /*************************************
  *	ROM definitions

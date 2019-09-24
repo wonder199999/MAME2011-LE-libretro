@@ -79,15 +79,15 @@ class running_machine;
 // generic_ptr is a union of pointers to various sizes
 union generic_ptr
 {
-	void *		v;
-	INT8 *		i8;
-	UINT8 *		u8;
-	INT16 *		i16;
-	UINT16 *	u16;
-	INT32 *		i32;
-	UINT32 *	u32;
-	INT64 *		i64;
-	UINT64 *	u64;
+	void		*v;
+	INT8			*i8;
+	UINT8			*u8;
+	INT16		*i16;
+	UINT16		*u16;
+	INT32			*i32;
+	UINT32			*u32;
+	INT64		*i64;
+	UINT64		*u64;
 };
 
 
@@ -157,19 +157,19 @@ const endianness_t ENDIANNESS_NATIVE = ENDIANNESS_LITTLE;
 // M_PI is not part of the C/C++ standards and is not present on
 // strict ANSI compilers or when compiling under GCC with -ansi
 #ifndef M_PI
-#define M_PI    						3.14159265358979323846
+#define M_PI    	3.14159265358979323846
 #endif
 
 
 // orientation of bitmaps
-#define	ORIENTATION_FLIP_X				0x0001	/* mirror everything in the X direction */
-#define	ORIENTATION_FLIP_Y				0x0002	/* mirror everything in the Y direction */
-#define ORIENTATION_SWAP_XY				0x0004	/* mirror along the top-left/bottom-right diagonal */
+#define	ORIENTATION_FLIP_X		0x0001	/* mirror everything in the X direction */
+#define	ORIENTATION_FLIP_Y		0x0002	/* mirror everything in the Y direction */
+#define ORIENTATION_SWAP_XY		0x0004	/* mirror along the top-left/bottom-right diagonal */
 
-#define	ROT0							0
-#define	ROT90							(ORIENTATION_SWAP_XY | ORIENTATION_FLIP_X)	/* rotate clockwise 90 degrees */
-#define	ROT180							(ORIENTATION_FLIP_X | ORIENTATION_FLIP_Y)	/* rotate 180 degrees */
-#define	ROT270							(ORIENTATION_SWAP_XY | ORIENTATION_FLIP_Y)	/* rotate counter-clockwise 90 degrees */
+#define	ROT0				0
+#define	ROT90			(ORIENTATION_SWAP_XY | ORIENTATION_FLIP_X)	/* rotate clockwise 90 degrees */
+#define	ROT180			(ORIENTATION_FLIP_X | ORIENTATION_FLIP_Y)	/* rotate 180 degrees */
+#define	ROT270			(ORIENTATION_SWAP_XY | ORIENTATION_FLIP_Y)	/* rotate counter-clockwise 90 degrees */
 
 
 
@@ -197,10 +197,10 @@ inline void operator--(_Type &value, int) { value = (_Type)((int)value - 1); }
 #undef assert_always
 
 #ifdef MAME_DEBUG
-#define assert(x)				do { if (!(x)) fprintf(stderr, "assert: %s:%d: %s", __FILE__, __LINE__, #x); } while (0)
+#define assert(x)		do { if (!(x)) fprintf(stderr, "assert: %s:%d: %s", __FILE__, __LINE__, #x); } while (0)
 #define assert_always(x, msg)	do { if (!(x)) fprintf(stderr, "Fatal error: %s\nCaused by assert: %s:%d: %s", msg, __FILE__, __LINE__, #x); } while (0)
 #else
-#define assert(x)				do { } while (0)
+#define assert(x)		do { } while (0)
 #define assert_always(x, msg)	do { if (!(x)) throw fprintf(stderr, "Fatal error: %s (%s:%d)", msg, __FILE__, __LINE__); } while (0)
 #endif
 
@@ -297,7 +297,6 @@ public:
 		: code(_exitcode)
 	{
 		vsprintf(text, format, ap);
-		osd_break_into_debugger(text);
 	}
 
 	const char *string() const { return text; }
@@ -369,22 +368,13 @@ public:
 
 	virtual ~simple_list() { reset(); }
 
+	resource_pool &pool() const { return m_pool; }
+
 	T *first() const { return m_head; }
 	T *last() const { return m_tail; }
 	int count() const { return m_count; }
 
 	void reset() { while (m_head != NULL) remove(*m_head); }
-
-	int index(T *object) const
-	{
-		int num = 0;
-		for (T *cur = m_head; cur != NULL; cur = cur->m_next)
-			if (cur == object)
-				return num;
-			else
-				num++;
-		return -1;
-	}
 
 	T &prepend(T &object)
 	{
@@ -394,6 +384,20 @@ public:
 			m_tail = m_head;
 		m_count++;
 		return object;
+	}
+
+	void prepend_list(simple_list<T> &list)
+	{
+		int count = list.count();
+		if (count == 0)
+			return;
+		T *tail = list.last();
+		T *head = list.detach_all();
+		tail->m_next = m_head;
+		m_head = head;
+		if (m_tail == NULL)
+			m_tail = tail;
+		m_count += count;
 	}
 
 	T &append(T &object)
@@ -407,7 +411,35 @@ public:
 		return object;
 	}
 
-	void detach(T &object)
+	void append_list(simple_list<T> &list)
+	{
+		int count = list.count();
+		if (count == 0)
+			return;
+		T *tail = list.last();
+		T *head = list.detach_all();
+		if (m_tail != NULL)
+			m_tail->m_next = head;
+		else
+			m_head = head;
+		m_tail = tail;
+		m_count += count;
+	}
+
+	T *detach_head()
+	{
+		T *result = m_head;
+		if (result != NULL)
+		{
+			m_head = result->m_next;
+			m_count--;
+			if (m_head == NULL)
+				m_tail = NULL;
+		}
+		return result;
+	}
+
+	T &detach(T &object)
 	{
 		T *prev = NULL;
 		for (T *cur = m_head; cur != NULL; prev = cur, cur = cur->m_next)
@@ -420,8 +452,17 @@ public:
 				if (m_tail == &object)
 					m_tail = prev;
 				m_count--;
-				return;
+				return object;
 			}
+		return object;
+	}
+
+	T *detach_all()
+	{
+		T *result = m_head;
+		m_head = m_tail = NULL;
+		m_count = 0;
+		return result;
 	}
 
 	void remove(T &object)
@@ -437,7 +478,50 @@ public:
 				return cur;
 		return NULL;
 	}
+
+	int indexof(const T &object) const
+	{
+		int index = 0;
+		for (T *cur = m_head; cur != NULL; cur = cur->m_next)
+		{
+			if (cur == &object)
+				return index;
+			index++;
+		}
+		return -1;
+	}
 };
+
+
+// ======================> fixed_allocator
+
+template<class T>
+class fixed_allocator
+{
+	DISABLE_COPYING(fixed_allocator);
+
+public:
+	fixed_allocator(resource_pool &pool = global_resource_pool)
+		: m_pool(pool),
+		  m_freelist(pool) { }
+
+	T *alloc()
+	{
+		T *result = m_freelist.detach_head();
+		if (result == NULL)
+			result = m_pool.add_object(new T);
+		return result;
+	}
+
+	void reclaim(T *item) { if (item != NULL) m_freelist.append(*item); }
+	void reclaim(T &item) { m_freelist.append(item); }
+	void reclaim_all(simple_list<T> &list) { m_freelist.append_list(list); }
+
+private:
+	resource_pool &m_pool;
+	simple_list<T> m_freelist;
+};
+
 
 // ===============================> tagged_list
 template<class T>
@@ -526,7 +610,7 @@ public:
 		return object;
 	}
 
-	void remove(T *object)
+	void detach(T *object)
 	{
 		for (T **objectptr = &m_head; *objectptr != NULL; objectptr = &(*objectptr)->m_next)
 			if (*objectptr == object)
@@ -535,9 +619,14 @@ public:
 				if (m_tailptr == &object->m_next)
 					m_tailptr = objectptr;
 				m_map.remove(object);
-				pool_free(m_pool, object);
 				return;
 			}
+	}
+
+	void remove(T *object)
+	{
+		detach(object);
+		pool_free(m_pool, object);
 	}
 
 	void remove(const char *tag)

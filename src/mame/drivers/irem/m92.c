@@ -451,7 +451,7 @@ static ADDRESS_MAP_START( ppan_portmap, ADDRESS_SPACE_IO, 16 )	/* ppan (bootleg 
 	AM_RANGE(0x06, 0x07) AM_READ_PORT("P3_P4")
 	AM_RANGE(0x08, 0x09) AM_READ(m92_sound_status_r)
 	AM_RANGE(0x10, 0x11) AM_DEVWRITE("oki", oki_bank_w)
-	AM_RANGE(0x18, 0x19) AM_DEVREADWRITE8("oki", okim6295_r, okim6295_w, 0x00ff)
+	AM_RANGE(0x18, 0x19) AM_DEVREADWRITE8_MODERN("oki", okim6295_device, read, write, 0x00ff)
 	AM_RANGE(0x02, 0x03) AM_WRITE(m92_coincounter_w)
 	AM_RANGE(0x40, 0x43) AM_WRITENOP
 	AM_RANGE(0x80, 0x87) AM_WRITE(m92_pf1_control_w)
@@ -927,9 +927,7 @@ GFXDECODE_END
 
 /***************************************************************************/
 
-static MACHINE_DRIVER_START( m92 )
-	MDRV_DRIVER_DATA(m92_state)
-
+static MACHINE_CONFIG_START( m92, m92_state )
 	/* basic machine hardware */
 	MDRV_CPU_ADD("maincpu", V33, XTAL_9MHz)			/* NEC V33, 18 MHz clock */
 	MDRV_CPU_PROGRAM_MAP(m92_map)
@@ -965,11 +963,9 @@ static MACHINE_DRIVER_START( m92 )
 	MDRV_SOUND_ROUTE(1, "mono", 0.40)
 	MDRV_SOUND_ADD("irem", IREMGA20, XTAL_3_579545MHz)
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
-static MACHINE_DRIVER_START( ppan )
-	MDRV_DRIVER_DATA(m92_state)
-
+static MACHINE_CONFIG_START( ppan, m92_state )
 	/* basic machine hardware */
 	MDRV_CPU_ADD( "maincpu", V33, XTAL_9MHz)
 	MDRV_CPU_PROGRAM_MAP( m92_map )
@@ -996,104 +992,91 @@ static MACHINE_DRIVER_START( ppan )
 	MDRV_SPEAKER_STANDARD_MONO("mono")
 	MDRV_OKIM6295_ADD("oki", XTAL_1MHz, OKIM6295_PIN7_HIGH)	/* clock frequency & pin 7 not verified */
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 1.0)
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 static const nec_config gunforce_config = { gunforce_decryption_table, };
-static MACHINE_DRIVER_START( gunforce )
-	MDRV_IMPORT_FROM( m92 )
+static MACHINE_CONFIG_DERIVED( gunforce, m92 )
 	MDRV_CPU_MODIFY( "soundcpu" )
 	MDRV_CPU_CONFIG( gunforce_config )
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 static const nec_config bmaster_config = { bomberman_decryption_table, };
-static MACHINE_DRIVER_START( bmaster )
-	MDRV_IMPORT_FROM( m92 )
+static MACHINE_CONFIG_DERIVED( bmaster, m92 )
 	MDRV_CPU_MODIFY( "soundcpu" )
 	MDRV_CPU_CONFIG( bmaster_config )
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 static const nec_config lethalth_config = { lethalth_decryption_table, };
-static MACHINE_DRIVER_START( lethalth )
-	MDRV_IMPORT_FROM( m92 )
+static MACHINE_CONFIG_DERIVED( lethalth, m92 )
 	MDRV_CPU_MODIFY( "maincpu" )
 	MDRV_CPU_PROGRAM_MAP( lethalth_map )
 	MDRV_CPU_MODIFY( "soundcpu" )
 	MDRV_CPU_CONFIG( lethalth_config )
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 static const nec_config uccops_config = { dynablaster_decryption_table, };
-static MACHINE_DRIVER_START( uccops )
-	MDRV_IMPORT_FROM( m92 )
+static MACHINE_CONFIG_DERIVED( uccops, m92 )
 	MDRV_CPU_MODIFY( "soundcpu" )
 	MDRV_CPU_CONFIG( uccops_config )
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 static const nec_config mysticri_config = { mysticri_decryption_table, };
-static MACHINE_DRIVER_START( mysticri )
-	MDRV_IMPORT_FROM( m92 )
+static MACHINE_CONFIG_DERIVED( mysticri, m92 )
 	MDRV_CPU_MODIFY( "soundcpu" )
 	MDRV_CPU_CONFIG( mysticri_config )
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 static const nec_config majtitl2_config = { majtitl2_decryption_table, };
-static MACHINE_DRIVER_START( majtitl2 )
-	MDRV_IMPORT_FROM( m92 )
+static MACHINE_CONFIG_DERIVED( majtitl2, m92 )
 	MDRV_CPU_MODIFY( "soundcpu" )
 	MDRV_CPU_CONFIG( majtitl2_config )
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 static const nec_config hook_config = { hook_decryption_table, };
-static MACHINE_DRIVER_START( hook )
-	MDRV_IMPORT_FROM( m92 )
+static MACHINE_CONFIG_DERIVED( hook, m92 )
 	MDRV_CPU_MODIFY( "soundcpu" )
 	MDRV_CPU_CONFIG( hook_config )
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 static const nec_config rtypeleo_config = { rtypeleo_decryption_table, };
-static MACHINE_DRIVER_START( rtypeleo )
-	MDRV_IMPORT_FROM( m92 )
+static MACHINE_CONFIG_DERIVED( rtypeleo, m92 )
 	MDRV_CPU_MODIFY( "soundcpu" )
 	MDRV_CPU_CONFIG( rtypeleo_config )
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 static const nec_config inthunt_config = { inthunt_decryption_table, };
-static MACHINE_DRIVER_START( inthunt )
-	MDRV_IMPORT_FROM( m92 )
+static MACHINE_CONFIG_DERIVED( inthunt, m92 )
 	MDRV_CPU_MODIFY( "soundcpu" )
 	MDRV_CPU_CONFIG( inthunt_config )
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 static const nec_config nbbatman_config = { leagueman_decryption_table, };
-static MACHINE_DRIVER_START( nbbatman )
-	MDRV_IMPORT_FROM( m92 )
+static MACHINE_CONFIG_DERIVED( nbbatman, m92 )
 	MDRV_CPU_MODIFY( "soundcpu" )
 	MDRV_CPU_CONFIG( nbbatman_config )
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 static const nec_config psoldier_config = { psoldier_decryption_table, };
-static MACHINE_DRIVER_START( psoldier )
-	MDRV_IMPORT_FROM( m92 )
+static MACHINE_CONFIG_DERIVED( psoldier, m92 )
 	MDRV_CPU_MODIFY( "soundcpu" )
 	MDRV_CPU_CONFIG( psoldier_config )
 	/* video hardware */
 	MDRV_GFXDECODE( gfx_psoldier )
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 static const nec_config gunforc2_config = { lethalth_decryption_table, };
-static MACHINE_DRIVER_START( gunforc2 )
-	MDRV_IMPORT_FROM( m92 )
+static MACHINE_CONFIG_DERIVED( gunforc2, m92 )
 	MDRV_CPU_MODIFY( "soundcpu" )
 	MDRV_CPU_CONFIG( gunforc2_config )
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 static const nec_config dsoccr94_config = { dsoccr94_decryption_table, };
-static MACHINE_DRIVER_START( dsoccr94j )
-	MDRV_IMPORT_FROM(m92)
+static MACHINE_CONFIG_DERIVED( dsoccr94j, m92 )
 	MDRV_CPU_MODIFY("soundcpu")
 	MDRV_CPU_CONFIG(dsoccr94_config)
 	/* video hardware */
 	MDRV_GFXDECODE( gfx_psoldier )
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 /***************************************************************************/
 

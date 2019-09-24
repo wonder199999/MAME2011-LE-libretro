@@ -767,7 +767,7 @@ public:
 	// bind the actual object
 	void bind(bindable_object &object)
 	{
-		m_object = (*m_caster)(object);
+		m_object = (*this->m_caster)(object);
 		if (m_rawfunction.u.funcptr != NULL)
 			m_function = reinterpret_cast<static_func>(delegate_convert_raw(m_object, m_rawfunction));
 	}
@@ -869,7 +869,7 @@ public:
 	// bind the actual object
 	void bind(bindable_object &object)
 	{
-		m_object = (*m_caster)(object);
+		m_object = (*this->m_caster)(object);
 		if (m_rawfunction.u.funcptr != NULL)
 			m_function = reinterpret_cast<static_func>(delegate_convert_raw(m_object, m_rawfunction));
 	}
@@ -971,7 +971,7 @@ public:
 	// bind the actual object
 	void bind(bindable_object &object)
 	{
-		m_object = (*m_caster)(object);
+		m_object = (*this->m_caster)(object);
 		if (m_rawfunction.u.funcptr != NULL)
 			m_function = reinterpret_cast<static_func>(delegate_convert_raw(m_object, m_rawfunction));
 	}
@@ -1073,7 +1073,7 @@ public:
 	// bind the actual object
 	void bind(bindable_object &object)
 	{
-		m_object = (*m_caster)(object);
+		m_object = (*this->m_caster)(object);
 		if (m_rawfunction.u.funcptr != NULL)
 			m_function = reinterpret_cast<static_func>(delegate_convert_raw(m_object, m_rawfunction));
 	}
@@ -1175,7 +1175,7 @@ public:
 	// bind the actual object
 	void bind(bindable_object &object)
 	{
-		m_object = (*m_caster)(object);
+		m_object = (*this->m_caster)(object);
 		if (m_rawfunction.u.funcptr != NULL)
 			m_function = reinterpret_cast<static_func>(delegate_convert_raw(m_object, m_rawfunction));
 	}

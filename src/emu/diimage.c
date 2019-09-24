@@ -270,12 +270,11 @@ const image_device_format *device_image_interface::device_get_named_creatable_fo
 
 void device_image_interface::clear_error()
 {
-    m_err = IMAGE_ERROR_SUCCESS;
-    if (m_err_message)
-    {
-        //image_freeptr(image->dev, image->err_message);
-        m_err_message.reset();
-    }
+	m_err = IMAGE_ERROR_SUCCESS;
+	if (m_err_message)
+	{
+		m_err_message.reset();
+	}
 }
 
 
@@ -404,23 +403,23 @@ bool device_image_interface::try_change_working_directory(const char *subdir)
 
 void device_image_interface::setup_working_directory()
 {
-    const game_driver *gamedrv;
+	const game_driver *gamedrv;
 	char *dst = NULL;
 
 	osd_get_full_path(&dst,".");
-    /* first set up the working directory to be the starting directory */
-    m_working_directory = dst;
+	/* first set up the working directory to be the starting directory */
+	m_working_directory = dst;
 
-    /* now try browsing down to "software" */
-    if (try_change_working_directory("software"))
-    {
-        /* now down to a directory for this computer */
-        gamedrv = device().machine->gamedrv;
-        while(gamedrv && !try_change_working_directory(gamedrv->name))
-        {
-            gamedrv = driver_get_compatible(gamedrv);
-        }
-    }
+	/* now try browsing down to "software" */
+	if (try_change_working_directory("software"))
+	{
+		/* now down to a directory for this computer */
+		gamedrv = device().machine->gamedrv;
+		while(gamedrv && !try_change_working_directory(gamedrv->name))
+		{
+			gamedrv = driver_get_compatible(gamedrv);
+		}
+	}
 	osd_free(dst);
 }
 
@@ -430,13 +429,13 @@ void device_image_interface::setup_working_directory()
 //  valid even if not mounted
 //-------------------------------------------------
 
-const char * device_image_interface::working_directory()
+const char *device_image_interface::working_directory()
 {
-   /* check to see if we've never initialized the working directory */
-    if (!m_working_directory)
-        setup_working_directory();
+	/* check to see if we've never initialized the working directory */
+	if (!m_working_directory)
+		setup_working_directory();
 
-    return m_working_directory;
+	return m_working_directory;
 }
 
 
@@ -578,7 +577,7 @@ done:
 
 
 void device_image_interface::run_hash(void (*partialhash)(char *, const unsigned char *, unsigned long, unsigned int),
-    char *dest, unsigned int hash_functions)
+	char *dest, unsigned int hash_functions)
 {
     UINT32 size;
     UINT8 *buf = NULL;
@@ -607,51 +606,51 @@ void device_image_interface::run_hash(void (*partialhash)(char *, const unsigned
 
 void device_image_interface::image_checkhash()
 {
-    const game_driver *drv;
-    char hash_string[HASH_BUF_SIZE];
-    device_image_partialhash_func partialhash;
-    int rc;
+	const game_driver *drv;
+	char hash_string[HASH_BUF_SIZE];
+	device_image_partialhash_func partialhash;
+	int rc;
 
-    /* only calculate CRC if it hasn't been calculated, and the open_mode is read only */
-    if (!m_hash && !m_writeable && !m_created)
-    {
-        /* do not cause a linear read of 600 megs please */
-        /* TODO: use SHA/MD5 in the CHD header as the hash */
-        if (m_image_config.image_type() == IO_CDROM)
-            return;
+	/* only calculate CRC if it hasn't been calculated, and the open_mode is read only */
+	if (!m_hash && !m_writeable && !m_created)
+	{
+		/* do not cause a linear read of 600 megs please */
+		/* TODO: use SHA/MD5 in the CHD header as the hash */
+		if (m_image_config.image_type() == IO_CDROM)
+			return;
 
 		/* Skip calculating the hash when we have an image mounted through a software list */
 		if ( m_software_info_ptr )
 			return;
 
-        /* retrieve the partial hash func */
-        partialhash = get_partial_hash();
+		/* retrieve the partial hash func */
+		partialhash = get_partial_hash();
 
-        run_hash(partialhash, hash_string, HASH_CRC | HASH_MD5 | HASH_SHA1);
+		run_hash(partialhash, hash_string, HASH_CRC | HASH_MD5 | HASH_SHA1);
 
-        m_hash = hash_string;
+		m_hash = hash_string;
 
-        /* now read the hash file */
-        drv = device().machine->gamedrv;
-        do
-        {
-            rc = read_hash_config(drv->name);
-            drv = driver_get_compatible(drv);
-        }
-        while(rc && (drv != NULL));
-    }
-    return;
+		/* now read the hash file */
+		drv = device().machine->gamedrv;
+		do
+		{
+			rc = read_hash_config(drv->name);
+			drv = driver_get_compatible(drv);
+		}
+		while(rc && (drv != NULL));
+	}
+	return;
 }
 
 UINT32 device_image_interface::crc()
 {
-    UINT32 crc = 0;
+	UINT32 crc = 0;
 
 	image_checkhash();
-    if (m_hash)
-        crc = hash_data_extract_crc32(m_hash.cstr());
+	if (m_hash)
+		crc = hash_data_extract_crc32(m_hash.cstr());
 
-    return crc;
+	return crc;
 }
 
 /****************************************************************************

@@ -778,7 +778,7 @@ static ADDRESS_MAP_START( kodb_soundmap, ADDRESS_SPACE_PROGRAM, 8 )
 	AM_RANGE(0x8000, 0xbfff) AM_ROMBANK("bank1")
 	AM_RANGE(0xd000, 0xd7ff) AM_RAM
 	AM_RANGE(0xe000, 0xe001) AM_DEVREADWRITE("2151", ym2151_r, ym2151_w)
-	AM_RANGE(0xe400, 0xe400) AM_DEVREADWRITE("oki", okim6295_r, okim6295_w)
+	AM_RANGE(0xe400, 0xe400) AM_DEVREADWRITE_MODERN("oki", okim6295_device, read, write)
 	AM_RANGE(0xe800, 0xe800) AM_READ(soundlatch_r)
 ADDRESS_MAP_END
 
@@ -787,7 +787,7 @@ static ADDRESS_MAP_START( sf2ceeabl_soundmap, ADDRESS_SPACE_PROGRAM, 8 )	/* The 
 	AM_RANGE(0x8000, 0xbfff) AM_ROMBANK("bank1")
 	AM_RANGE(0xd000, 0xd7ff) AM_RAM
 	AM_RANGE(0xf000, 0xf001) AM_DEVREADWRITE("2151", ym2151_r, ym2151_w)
-	AM_RANGE(0xf002, 0xf002) AM_DEVREADWRITE("oki", okim6295_r, okim6295_w)
+	AM_RANGE(0xf002, 0xf002) AM_DEVREADWRITE_MODERN("oki", okim6295_device, read, write)
 	AM_RANGE(0xf004, 0xf004) AM_WRITE(cps1_snd_bankswitch_w)
 	AM_RANGE(0xf006, 0xf006) AM_DEVWRITE("oki", cps1_oki_pin7_w)
 	AM_RANGE(0xf008, 0xf008) AM_READ(soundlatch_r)
@@ -1246,9 +1246,7 @@ static MACHINE_START( slampic )
 
 
 /* ********************************************************* FCRASH */
-static MACHINE_DRIVER_START( fcrash )
-	MDRV_DRIVER_DATA(cps_state)
-
+static MACHINE_CONFIG_START( fcrash, cps_state )
 	/* basic machine hardware */
 	MDRV_CPU_ADD("maincpu", M68000, XTAL_10MHz )
 	MDRV_CPU_PROGRAM_MAP(fcrash_map)
@@ -1289,12 +1287,10 @@ static MACHINE_DRIVER_START( fcrash )
 	MDRV_SOUND_ADD("msm2", MSM5205, XTAL_375KHz)	/* ? */
 	MDRV_SOUND_CONFIG(msm5205_interface2)
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 /* ********************************************************* KODB */
-static MACHINE_DRIVER_START( kodb )
-	MDRV_DRIVER_DATA(cps_state)
-
+static MACHINE_CONFIG_START( kodb, cps_state )
 	/* basic machine hardware */
 	MDRV_CPU_ADD("maincpu", M68000, XTAL_10MHz )
 	MDRV_CPU_PROGRAM_MAP(fcrash_map)
@@ -1324,12 +1320,10 @@ static MACHINE_DRIVER_START( kodb )
 	MDRV_SOUND_ROUTE(1, "mono", 0.35)
 	MDRV_OKIM6295_ADD("oki", XTAL_1MHz, OKIM6295_PIN7_HIGH)
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.30)
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 /* ********************************************************* SF2MDT */
-static MACHINE_DRIVER_START( sf2mdt )
-	MDRV_DRIVER_DATA(cps_state)
-
+static MACHINE_CONFIG_START( sf2mdt, cps_state )
 	/* basic machine hardware */
 	MDRV_CPU_ADD("maincpu", M68000, XTAL_12MHz )
 	MDRV_CPU_PROGRAM_MAP(sf2mdt_map)
@@ -1363,21 +1357,17 @@ static MACHINE_DRIVER_START( sf2mdt )
 	MDRV_SOUND_ADD("msm2", MSM5205, XTAL_375KHz)
 	MDRV_SOUND_CONFIG(msm5205_interface2)
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 /* ********************************************************* SF2B */
-static MACHINE_DRIVER_START( sf2b )
-	MDRV_IMPORT_FROM( sf2mdt )
-
+static MACHINE_CONFIG_DERIVED( sf2b, sf2mdt )
 	MDRV_CPU_MODIFY("maincpu")
 	MDRV_CPU_CLOCK( XTAL_10MHz )
 	MDRV_MACHINE_START( sf2b )
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 /* ********************************************************* KNIGHTSB */
-static MACHINE_DRIVER_START( knightsb )
-	MDRV_DRIVER_DATA(cps_state)
-
+static MACHINE_CONFIG_START( knightsb, cps_state )
 	/* basic machine hardware */
 	MDRV_CPU_ADD("maincpu", M68000, XTAL_10MHz )
 	MDRV_CPU_PROGRAM_MAP(knightsb_map)
@@ -1412,12 +1402,10 @@ static MACHINE_DRIVER_START( knightsb )
 	MDRV_SOUND_ADD("msm2", MSM5205, XTAL_375KHz)	/* ? */
 	MDRV_SOUND_CONFIG(msm5205_interface2)
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 /* ********************************************************* SF2CEEABL / SF2CEEAB2 */
-static MACHINE_DRIVER_START( sf2ceeabl )
-	MDRV_DRIVER_DATA(cps_state)
-
+static MACHINE_CONFIG_START( sf2ceeabl, cps_state )
 	/* basic machine hardware */
 	MDRV_CPU_ADD("maincpu", M68000, XTAL_12MHz )
 	MDRV_CPU_PROGRAM_MAP(sf2ceeabl_map)
@@ -1447,12 +1435,10 @@ static MACHINE_DRIVER_START( sf2ceeabl )
 	MDRV_SOUND_ROUTE(1, "mono", 0.35)
 	MDRV_OKIM6295_ADD("oki", XTAL_1MHz, OKIM6295_PIN7_HIGH)
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.30)
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 /* ********************************************************* SGYXZ */
-static MACHINE_DRIVER_START( sgyxz )
-	MDRV_DRIVER_DATA(cps_state)
-
+static MACHINE_CONFIG_START( sgyxz, cps_state )
 	/* basic machine hardware */
 	MDRV_CPU_ADD("maincpu", M68000, XTAL_12MHz )
 	MDRV_CPU_PROGRAM_MAP(sgyxz_map)
@@ -1484,21 +1470,16 @@ static MACHINE_DRIVER_START( sgyxz )
 	MDRV_SOUND_ROUTE(1, "mono", 0.35)
 	MDRV_OKIM6295_ADD("oki", XTAL_1MHz, OKIM6295_PIN7_HIGH)
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.30)
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 /* ********************************************************* WOFSJ */
-static MACHINE_DRIVER_START( wofsj )
-	/* basic machine hardware */
-	MDRV_IMPORT_FROM(sgyxz)
-
+static MACHINE_CONFIG_DERIVED( wofsj, sgyxz )
 	MDRV_CPU_MODIFY("maincpu")
 	MDRV_CPU_PROGRAM_MAP(wofsj_map)
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 /* ********************************************************* PUNIPIC / PUNIPIC2 / PUNIPIC3 */
-static MACHINE_DRIVER_START( punipic )
-	MDRV_DRIVER_DATA(cps_state)
-
+static MACHINE_CONFIG_START( punipic, cps_state )
 	/* basic machine hardware */
 	MDRV_CPU_ADD("maincpu", M68000, XTAL_12MHz )
 	MDRV_CPU_PROGRAM_MAP(punipic_map)
@@ -1524,22 +1505,18 @@ static MACHINE_DRIVER_START( punipic )
 	MDRV_SPEAKER_STANDARD_MONO("mono")
 	MDRV_OKIM6295_ADD("oki", XTAL_1MHz, OKIM6295_PIN7_HIGH)
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.30)
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 /* ********************************************************* CAWINGBL / CAWINGB2 */
-static MACHINE_DRIVER_START( cawingbl )
-	MDRV_IMPORT_FROM(fcrash)
-
+static MACHINE_CONFIG_DERIVED( cawingbl, fcrash )
 	MDRV_CPU_MODIFY("maincpu")
 	MDRV_CPU_VBLANK_INT("screen", irq6_line_hold)	 /* needed to write to scroll values */
 
 	MDRV_MACHINE_START(cawingbl)
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 /* ********************************************************* DINOPIC / DINOPIC2 */
-static MACHINE_DRIVER_START( dinopic )
-	MDRV_DRIVER_DATA(cps_state)
-
+static MACHINE_CONFIG_START( dinopic, cps_state )
 	/* basic machine hardware */
 	MDRV_CPU_ADD("maincpu", M68000, XTAL_12MHz )
 	MDRV_CPU_PROGRAM_MAP(dinopic_map)
@@ -1565,12 +1542,10 @@ static MACHINE_DRIVER_START( dinopic )
 	MDRV_SPEAKER_STANDARD_MONO("mono")
 	MDRV_OKIM6295_ADD("oki", XTAL_1MHz, OKIM6295_PIN7_HIGH)
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.30)
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 /* ********************************************************* SLAMPIC */
-static MACHINE_DRIVER_START( slampic )
-	MDRV_DRIVER_DATA(cps_state)
-
+static MACHINE_CONFIG_START( slampic, cps_state )
 	/* basic machine hardware */
 	MDRV_CPU_ADD("maincpu", M68000, XTAL_12MHz )
 	MDRV_CPU_PROGRAM_MAP(slampic_map)
@@ -1596,12 +1571,10 @@ static MACHINE_DRIVER_START( slampic )
 	MDRV_SPEAKER_STANDARD_MONO("mono")
 	MDRV_OKIM6295_ADD("oki", XTAL_1MHz, OKIM6295_PIN7_HIGH)
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.30)
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 /* ********************************************************* CAPTCOMM2 */
-static MACHINE_DRIVER_START( captcommb2 )
-	MDRV_DRIVER_DATA(cps_state)
-
+static MACHINE_CONFIG_START( captcommb2, cps_state )
 	/* basic machine hardware */
 	MDRV_CPU_ADD("maincpu", M68000, XTAL_10MHz )
 	MDRV_CPU_PROGRAM_MAP(captcommb2_map)
@@ -1617,7 +1590,7 @@ static MACHINE_DRIVER_START( captcommb2 )
 	MDRV_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(0))
 	MDRV_SCREEN_FORMAT(BITMAP_FORMAT_INDEXED16)
 	MDRV_SCREEN_SIZE(64*8, 32*8)
-	MDRV_SCREEN_VISIBLE_AREA(8*8, (64-8)*8-1, 2*8, 30*8-1 )
+	MDRV_SCREEN_VISIBLE_AREA(8*8, (64-8)*8-1, 2*8, 30*8-1)
 	MDRV_VIDEO_UPDATE(cps1)
 	MDRV_VIDEO_EOF(cps1)
 	MDRV_GFXDECODE(cps1)
@@ -1635,12 +1608,10 @@ static MACHINE_DRIVER_START( captcommb2 )
 	MDRV_SOUND_ADD("msm2", MSM5205, XTAL_375KHz)
 	MDRV_SOUND_CONFIG(msm5205_interface2)
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.25)
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 /* ********************************************************* VARTHB */
-static MACHINE_DRIVER_START( varthb )
-	MDRV_DRIVER_DATA(cps_state)
-
+static MACHINE_CONFIG_START( varthb, cps_state )
 	/* basic machine hardware */
 	MDRV_CPU_ADD("maincpu", M68000, XTAL_12MHz )
 	MDRV_CPU_PROGRAM_MAP(varthb_map)
@@ -1670,7 +1641,7 @@ static MACHINE_DRIVER_START( varthb )
 	MDRV_SOUND_ROUTE(1, "mono", 0.35)
 	MDRV_OKIM6295_ADD("oki", XTAL_1MHz, OKIM6295_PIN7_HIGH)
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.30)
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 
 /* ----------------------------- */

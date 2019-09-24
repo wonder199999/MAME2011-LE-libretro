@@ -56,7 +56,7 @@ OBJDIRS += \
 # updated with any MAME core changes
 #-------------------------------------------------
 
-CPUS += ARM7
+# CPUS += ARM7		# PGM
 CPUS += HD6309
 CPUS += M6502
 CPUS += M680X0
@@ -77,8 +77,7 @@ SOUNDS += DAC
 SOUNDS += DMADAC
 SOUNDS += SPEAKER
 SOUNDS += BEEP
-
-SOUNDS += ICS2115
+# SOUNDS += ICS2115	# PGM
 SOUNDS += IREMGA20
 SOUNDS += MSM5205
 SOUNDS += OKIM6295
@@ -104,7 +103,7 @@ DRVLIBS = \
 	$(MAMEOBJ)/neogeo.a \
 	\
 	$(MAMEOBJ)/technos.a \
-	$(MAMEOBJ)/igs.a \
+
 
 #-------------------------------------------------
 # the following files are general components and
@@ -140,16 +139,11 @@ TECHNOSOBJS = \
 	$(DRIVERS)/technos/blockout.o $(VIDEO)/blockout.o \
 	$(DRIVERS)/technos/mystston.o $(VIDEO)/mystston.o
 
-IGSOBJS = \
-	$(DRIVERS)/igs/pgm.o $(VIDEO)/pgm.o \
-	$(MACHINE)/pgmcrypt.o $(MACHINE)/pgmprot.o
-
 
 $(MAMEOBJ)/capcom.a:	$(CAPCOMOBJS)
 $(MAMEOBJ)/irem.a:	$(IREMOBJS)
 $(MAMEOBJ)/neogeo.a:	$(NEOGEOOBJS)
 $(MAMEOBJ)/technos.a:	$(TECHNOSOBJS)
-$(MAMEOBJ)/igs.a:	$(IGSOBJS)
 
 
 #-------------------------------------------------
@@ -241,7 +235,6 @@ EMUOBJS = \
 	$(EMUOBJ)/video.o \
 	$(EMUOBJ)/watchdog.o \
 	$(EMUOBJ)/debug/debugcmd.o \
-	$(EMUOBJ)/debug/debugcmt.o \
 	$(EMUOBJ)/debug/debugcon.o \
 	$(EMUOBJ)/debug/debugcpu.o \
 	$(EMUOBJ)/debug/debughlp.o \
@@ -272,6 +265,7 @@ EMUMACHINEOBJS = \
 	$(EMUMACHINE)/generic.o \
 	$(EMUMACHINE)/ldcore.o \
 	$(EMUMACHINE)/ldv1000.o \
+	$(EMUMACHINE)/nvram.o \
 	$(EMUMACHINE)/pd4990a.o \
 	$(EMUMACHINE)/z80ctc.o \
 	$(EMUMACHINE)/timekpr.o \

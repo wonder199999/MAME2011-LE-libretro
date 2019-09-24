@@ -47,9 +47,9 @@
 #define __DIEXEC_H__
 
 
-//**************************************************************************
+//*************************************************************************/
 //  CONSTANTS
-//**************************************************************************/
+//*************************************************************************/
 
 // suspension reasons for executing devices
 const UINT32 SUSPEND_REASON_HALT		= 0x0001;	// HALT line set (or equivalent)
@@ -95,37 +95,33 @@ enum
 
 
 
-//**************************************************************************
+//*************************************************************************/
 //  MACROS
-//**************************************************************************/
+//*************************************************************************/
 
 // IRQ callback to be called by device implementations when an IRQ is actually taken
 #define IRQ_CALLBACK(func)				int func(device_t *device, int irqline)
 
 
 
-//**************************************************************************
+//*************************************************************************/
 //  INTERFACE CONFIGURATION MACROS
-//**************************************************************************/
+//*************************************************************************/
 
 #define MDRV_DEVICE_DISABLE() \
-	TOKEN_UINT32_PACK1(MCONFIG_TOKEN_DIEXEC_DISABLE, 8), \
+	device_config_execute_interface::static_set_disable(device); \
 
 #define MDRV_DEVICE_VBLANK_INT(_tag, _func) \
-	TOKEN_UINT32_PACK2(MCONFIG_TOKEN_DIEXEC_VBLANK_INT, 8, 0, 24), \
-	TOKEN_PTR(device_interrupt, _func), \
-	TOKEN_PTR(stringptr, _tag), \
+	device_config_execute_interface::static_set_vblank_int(device, _func, _tag); \
 
 #define MDRV_DEVICE_PERIODIC_INT(_func, _rate)	\
-	TOKEN_UINT32_PACK1(MCONFIG_TOKEN_DIEXEC_PERIODIC_INT, 8), \
-	TOKEN_PTR(device_interrupt, _func), \
-	TOKEN_UINT64(UINT64_ATTOTIME_IN_HZ(_rate)), \
+	device_config_execute_interface::static_set_periodic_int(device, _func, ATTOTIME_IN_HZ(_rate)); \
 
 
 
-//**************************************************************************
+//*************************************************************************/
 //  TYPE DEFINITIONS
-//**************************************************************************/
+//*************************************************************************/
 
 class emu_timer;
 class screen_device;
@@ -164,6 +160,11 @@ public:
 	UINT32 input_lines() const { return execute_input_lines(); }
 	UINT32 default_irq_vector() const { return execute_default_irq_vector(); }
 
+	// static inline helpers
+	static void static_set_disable(device_config *device);
+	static void static_set_vblank_int(device_config *device, device_interrupt_func function, const char *tag, int rate = 0);
+	static void static_set_periodic_int(device_config *device, device_interrupt_func function, attotime rate);
+
 protected:
 	// clock and cycle information getters
 	virtual UINT64 execute_clocks_to_cycles(UINT64 clocks) const;
@@ -176,7 +177,6 @@ protected:
 	virtual UINT32 execute_default_irq_vector() const;
 
 	// optional operation overrides
-	virtual bool interface_process_token(UINT32 entrytype, const machine_config_token *&tokens);
 	virtual bool interface_validity_check(const game_driver &driver) const;
 
 	bool					m_disabled;
@@ -184,7 +184,7 @@ protected:
 	int 					m_vblank_interrupts_per_frame;	// usually 1
 	const char *			m_vblank_interrupt_screen;		// the screen that causes the VBLANK interrupt
 	device_interrupt_func	m_timed_interrupt;				// for interrupts not tied to VBLANK
-	UINT64					m_timed_interrupt_period;		// period for periodic interrupts
+	attotime				m_timed_interrupt_period;		// period for periodic interrupts
 };
 
 
@@ -322,8 +322,8 @@ protected:
 	attotime				m_partial_frame_period;		// the length of one partial frame for interrupt purposes
 
 	// cycle counting and executing
-	profile_type						m_profiler;					// profiler tag
-	int *					m_icount;					// pointer to the icount
+	profile_type			m_profiler;					// profiler tag
+	int *					m_icountptr;					// pointer to the icount
 	int 					m_cycles_running;			// number of cycles we are executing
 	int						m_cycles_stolen;			// number of cycles we artificially stole
 
@@ -361,9 +361,9 @@ private:
 
 
 
-//**************************************************************************
+//*************************************************************************/
 //  INLINE HELPERS
-//**************************************************************************/
+//*************************************************************************/
 
 //-------------------------------------------------
 //  device_execute - return a pointer to the device

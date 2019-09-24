@@ -445,8 +445,10 @@ public:
 #define construct_address_map_0		NULL
 
 
-// Legacy ADDRESS_MAPs
 #ifndef ADDRESS_MAP_MODERN
+//
+// Legacy ADDRESS_MAPs
+//
 
 // start/end tags for the address map
 #define ADDRESS_MAP_NAME(_name) construct_address_map_##_name
@@ -711,8 +713,10 @@ void ADDRESS_MAP_NAME(_name)(address_map &map, const device_config &devconfig)		
 #define AM_BASE_SIZE_GENERIC(_member)			AM_BASE_GENERIC(_member) AM_SIZE_GENERIC(_member)
 
 
-// Modern ADDRESS_MAPs
 #else
+//
+// Modern ADDRESS_MAPs
+//
 
 // start/end tags for the address map
 #define ADDRESS_MAP_NAME(_name) construct_address_map_##_name

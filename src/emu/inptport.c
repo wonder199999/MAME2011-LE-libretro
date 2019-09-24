@@ -2485,7 +2485,8 @@ static void frame_update(running_machine *machine)
 	{
 		const char *tag = NULL;
 		input_port_value mask;
-		if (render_target_map_point_input(mouse_target, mouse_target_x, mouse_target_y, &tag, &mask, NULL, NULL))
+		float x, y;
+		if (mouse_target->map_point_input(mouse_target_x, mouse_target_y, tag, mask, x, y))
 			mouse_field = input_field_by_tag_and_mask(machine->m_portlist, tag, mask);
 	}
 */

@@ -846,7 +846,7 @@ static ADDRESS_MAP_START( sub_map, ADDRESS_SPACE_PROGRAM, 8 )
 	AM_RANGE(0x8000, 0xbfff) AM_ROMBANK("bank1")
 	AM_RANGE(0xd000, 0xd7ff) AM_RAM
 	AM_RANGE(0xf000, 0xf001) AM_DEVREADWRITE("2151", ym2151_r, ym2151_w)
-	AM_RANGE(0xf002, 0xf002) AM_DEVREADWRITE("oki", okim6295_r, okim6295_w)
+	AM_RANGE(0xf002, 0xf002) AM_DEVREADWRITE_MODERN("oki", okim6295_device, read, write)
 	AM_RANGE(0xf004, 0xf004) AM_WRITE(cps1_snd_bankswitch_w)
 	AM_RANGE(0xf006, 0xf006) AM_DEVWRITE("oki", cps1_oki_pin7_w)		/* controls pin 7 of OKI chip */
 	AM_RANGE(0xf008, 0xf008) AM_READ(soundlatch_r)				/* Sound command */
@@ -3389,10 +3389,7 @@ static MACHINE_START( qsound )
 	memory_configure_bank(machine, "bank1", 0, 6, memory_region(machine, "audiocpu") + 0x10000, 0x4000);
 }
 
-static MACHINE_DRIVER_START( cps1_10MHz )
-	/* driver data */
-	MDRV_DRIVER_DATA(cps_state)
-
+static MACHINE_CONFIG_START( cps1_10MHz, cps_state )
 	/* basic machine hardware */
 	MDRV_CPU_ADD("maincpu", M68000, XTAL_10MHz )			/* verified on pcb */
 	MDRV_CPU_PROGRAM_MAP(main_map)
@@ -3421,20 +3418,15 @@ static MACHINE_DRIVER_START( cps1_10MHz )
 	/* CPS PPU is fed by a 16mhz clock, pin 117 outputs a 4mhz clock which is divided by 4 using 2 74ls74 */
 	MDRV_OKIM6295_ADD("oki", XTAL_16MHz/4/4, OKIM6295_PIN7_HIGH)	/* pin 7 can be changed by the game code, see f006 on z80 */
 	MDRV_SOUND_ROUTE(ALL_OUTPUTS, "mono", 0.30)
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
-static MACHINE_DRIVER_START( cps1_12MHz )
-	/* basic machine hardware */
-	MDRV_IMPORT_FROM(cps1_10MHz)
-
+static MACHINE_CONFIG_DERIVED(cps1_12MHz, cps1_10MHz)
 	MDRV_CPU_MODIFY("maincpu")
 	MDRV_CPU_CLOCK( XTAL_12MHz )					/* verified on pcb */
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
-static MACHINE_DRIVER_START( qsound )
+static MACHINE_CONFIG_DERIVED( qsound, cps1_12MHz )
 	/* basic machine hardware */
-	MDRV_IMPORT_FROM(cps1_12MHz)
-
 	MDRV_CPU_REPLACE("maincpu", M68000, XTAL_12MHz )		/* verified on pcb */
 	MDRV_CPU_PROGRAM_MAP(qsound_main_map)
 	MDRV_CPU_VBLANK_INT("screen", cps1_interrupt)			/* ??? interrupts per frame */
@@ -3455,65 +3447,43 @@ static MACHINE_DRIVER_START( qsound )
 	MDRV_SOUND_ADD("qsound", QSOUND, QSOUND_CLOCK)
 	MDRV_SOUND_ROUTE(0, "lspeaker", 1.0)
 	MDRV_SOUND_ROUTE(1, "rspeaker", 1.0)
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 /* --------------- Machine Driver for game-specific --------------- */
 
-static MACHINE_DRIVER_START( wofhfh )
-	/* basic machine hardware */
-	MDRV_IMPORT_FROM(cps1_12MHz)
-
+static MACHINE_CONFIG_DERIVED( wofhfh, cps1_12MHz )
 	MDRV_EEPROM_ADD("eeprom", qsound_eeprom_interface)
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
-static MACHINE_DRIVER_START( sf2ceuabl )
-	/* basic machine hardware */
-	MDRV_IMPORT_FROM(cps1_12MHz)
-
+static MACHINE_CONFIG_DERIVED( sf2ceuabl, cps1_12MHz )
 	MDRV_CPU_MODIFY("maincpu")
 	MDRV_CPU_PROGRAM_MAP(sf2ceuabl_map)
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
-static MACHINE_DRIVER_START( ganbare )
-	/* basic machine hardware */
-	MDRV_IMPORT_FROM(cps1_10MHz)
-
+static MACHINE_CONFIG_DERIVED( ganbare, cps1_10MHz )
 	MDRV_CPU_MODIFY("maincpu")
 	MDRV_TIMER_ADD_SCANLINE("scantimer", ganbare_interrupt, "screen", 0, 1)
-
 	MDRV_M48T35_ADD( "m48t35" )
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
-static MACHINE_DRIVER_START( pang3 )
-	/* basic machine hardware */
-	MDRV_IMPORT_FROM(cps1_12MHz)
-
+static MACHINE_CONFIG_DERIVED( pang3, cps1_12MHz )
 	MDRV_EEPROM_ADD("eeprom", pang3_eeprom_interface)
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
-static MACHINE_DRIVER_START( daimakaib )
-	/* basic machine hardware */
-	MDRV_IMPORT_FROM(cps1_10MHz)
-
+static MACHINE_CONFIG_DERIVED( daimakaib, cps1_10MHz )
 	MDRV_CPU_MODIFY("maincpu")
 	MDRV_CPU_PROGRAM_MAP(daimakaib_map)
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
-static MACHINE_DRIVER_START( wofsjb )
-	/* basic machine hardware */
-	MDRV_IMPORT_FROM(qsound)
-
+static MACHINE_CONFIG_DERIVED( wofsjb, qsound )
 	MDRV_CPU_MODIFY("maincpu")
 	MDRV_CPU_PROGRAM_MAP(wofsjb_map)
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
-static MACHINE_DRIVER_START( cps1frog )
-	/* basic machine hardware */
-	MDRV_IMPORT_FROM(cps1_10MHz)
-
+static MACHINE_CONFIG_DERIVED( cps1frog, cps1_10MHz )
 	MDRV_CPU_MODIFY("maincpu")
 	MDRV_CPU_PROGRAM_MAP(cps1frog_map)
-MACHINE_DRIVER_END
+MACHINE_CONFIG_END
 
 /***************************************************************************
 
